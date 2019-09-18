@@ -11,11 +11,13 @@ require (
 	code.cloudfoundry.org/bytefmt v0.0.0-20190710193110-1eb035ffe2b6
 	github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78 // indirect
 	github.com/Azure/go-autorest/autorest v0.5.0 // indirect
+	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Microsoft/go-winio v0.4.12 // indirect
 	github.com/NYTimes/gziphandler v1.1.1 // indirect
 	github.com/PuerkitoBio/goquery v1.5.0
+	github.com/PuerkitoBio/purell v1.1.1 // indirect
 	github.com/appscode/jsonpatch v0.0.0-20190108182946-7c0e3b262f30 // indirect
-	github.com/asaskevich/govalidator v0.0.0-20180315120708-ccb8e960c48f
+	github.com/asaskevich/govalidator v0.0.0-20190424111038-f61b66f89f4a
 	github.com/aws/aws-sdk-go v1.22.2
 	github.com/beevik/etree v1.1.0
 	github.com/beorn7/perks v1.0.0 // indirect
@@ -24,12 +26,11 @@ require (
 	github.com/coreos/etcd v3.3.13+incompatible // indirect
 	github.com/coreos/go-semver v0.3.0 // indirect
 	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f // indirect
-	github.com/deckarep/golang-set v1.7.1 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/docker/docker v1.4.2-0.20190822205725-ed20165a37b4
 	github.com/docker/go-connections v0.3.0 // indirect
-	github.com/docker/go-units v0.3.3 // indirect
+	github.com/docker/go-units v0.0.0-00010101000000-000000000000 // indirect
 	github.com/docker/spdystream v0.0.0-20181023171402-6480d4af844c // indirect
 	github.com/elastic/go-elasticsearch/v5 v5.6.1
 	github.com/elastic/go-elasticsearch/v6 v6.8.2
@@ -46,10 +47,10 @@ require (
 	github.com/go-ldap/ldap v3.0.3+incompatible
 	github.com/go-logr/logr v0.1.0
 	github.com/go-logr/zapr v0.1.1 // indirect
-	github.com/go-openapi/jsonpointer v0.19.0 // indirect
 	github.com/go-openapi/jsonreference v0.19.0 // indirect
-	github.com/go-openapi/spec v0.19.0
-	github.com/go-openapi/swag v0.19.0 // indirect
+	github.com/go-openapi/spec v0.19.3
+	github.com/go-openapi/strfmt v0.19.3
+	github.com/go-openapi/validate v0.19.3 // indirect
 	github.com/go-playground/locales v0.12.1 // indirect
 	github.com/go-playground/universal-translator v0.16.0 // indirect
 	github.com/go-redis/redis v6.15.2+incompatible
@@ -57,6 +58,8 @@ require (
 	github.com/gobuffalo/flect v0.1.5 // indirect
 	github.com/gocraft/dbr v0.0.0-20180507214907-a0fd650918f6
 	github.com/golang/example v0.0.0-20170904185048-46695d81d1fa
+	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
+	github.com/golang/protobuf v1.3.1
 	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/google/gofuzz v1.0.0 // indirect
 	github.com/google/uuid v1.1.1
@@ -82,6 +85,7 @@ require (
 	github.com/leodido/go-urn v1.1.0 // indirect
 	github.com/lib/pq v1.2.0 // indirect
 	github.com/lucas-clemente/quic-go v0.11.1 // indirect
+	github.com/mailru/easyjson v0.0.0-20190312143242-1de009706dbe // indirect
 	github.com/mattn/go-sqlite3 v1.11.0 // indirect
 	github.com/mholt/caddy v1.0.0
 	github.com/mholt/certmagic v0.5.1 // indirect
@@ -95,9 +99,8 @@ require (
 	github.com/opencontainers/go-digest v1.0.0-rc1
 	github.com/opencontainers/image-spec v1.0.1 // indirect
 	github.com/openshift/api v3.9.0+incompatible // indirect
-	github.com/pborman/uuid v0.0.0-20180906182336-adf5a7427709 // indirect
+	github.com/pborman/uuid v0.0.0-00010101000000-000000000000 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
-	github.com/pkg/errors v0.8.1 // indirect
 	github.com/projectcalico/go-json v0.0.0-20161128004156-6219dc7339ba // indirect
 	github.com/projectcalico/go-yaml v0.0.0-20161201183616-955bc3e451ef // indirect
 	github.com/projectcalico/go-yaml-wrapper v0.0.0-20161127220527-598e54215bee // indirect
@@ -112,14 +115,16 @@ require (
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/pflag v1.0.3
 	github.com/spf13/viper v1.4.0
-	github.com/stretchr/testify v1.3.0
+	github.com/stretchr/testify v1.4.0
 	github.com/xanzy/ssh-agent v0.2.1 // indirect
 	go.etcd.io/bbolt v1.3.3 // indirect
 	golang.org/x/net v0.0.0-20190620200207-3b0461eec859
 	golang.org/x/oauth2 v0.0.0-20190402181905-9f3314589c9a // indirect
+	golang.org/x/sys v0.0.0-20190321052220-f7bb7a8bee54 // indirect
 	golang.org/x/tools v0.0.0-20190710153321-831012c29e42 // indirect
 	google.golang.org/appengine v1.5.0 // indirect
 	google.golang.org/genproto v0.0.0-20190418145605-e7d98fc518a7 // indirect
+	google.golang.org/grpc v1.21.0
 	gopkg.in/asn1-ber.v1 v1.0.0-20181015200546-f715ec2f112d // indirect
 	gopkg.in/go-playground/assert.v1 v1.2.1 // indirect
 	gopkg.in/go-playground/validator.v9 v9.29.1 // indirect
@@ -141,6 +146,9 @@ require (
 	k8s.io/klog v0.4.0
 	k8s.io/kube-openapi v0.0.0-20181109181836-c59034cc13d5
 	k8s.io/kubernetes v1.13.6
+	kubesphere.io/im v0.1.0 // indirect
+	openpitrix.io/iam v0.1.0 // indirect
+	openpitrix.io/openpitrix v0.4.1-0.20190917103743-50192cc3851a
 	sigs.k8s.io/application v0.0.0-20190404151855-67ae7f915d4e
 	sigs.k8s.io/controller-runtime v0.1.10
 	sigs.k8s.io/controller-tools v0.1.12
@@ -227,7 +235,9 @@ replace (
 	github.com/go-openapi/jsonpointer => github.com/go-openapi/jsonpointer v0.19.0
 	github.com/go-openapi/jsonreference => github.com/go-openapi/jsonreference v0.19.0
 	github.com/go-openapi/spec => github.com/go-openapi/spec v0.19.0
+	github.com/go-openapi/strfmt => github.com/go-openapi/strfmt v0.19.0
 	github.com/go-openapi/swag => github.com/go-openapi/swag v0.19.0
+	github.com/go-openapi/validate => github.com/go-openapi/validate v0.19.0
 	github.com/go-playground/locales => github.com/go-playground/locales v0.12.1
 	github.com/go-playground/universal-translator => github.com/go-playground/universal-translator v0.16.0
 	github.com/go-redis/redis => github.com/go-redis/redis v6.15.2+incompatible
@@ -404,6 +414,8 @@ replace (
 	k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20181109181836-c59034cc13d5
 	k8s.io/kubernetes => k8s.io/kubernetes v1.13.6
 	k8s.io/utils => k8s.io/utils v0.0.0-20190506122338-8fab8cb257d5
+	openpitrix.io/logger v0.1.0 => github.com/openpitrix/logger v0.1.0
+	openpitrix.io/openpitrix v0.4.1-0.20190917103743-50192cc3851a => github.com/openpitrix/openpitrix v0.4.1-0.20190917103743-50192cc3851a
 	sigs.k8s.io/application => sigs.k8s.io/application v0.0.0-20190404151855-67ae7f915d4e
 	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.1.10
 	sigs.k8s.io/controller-tools => sigs.k8s.io/controller-tools v0.1.12
