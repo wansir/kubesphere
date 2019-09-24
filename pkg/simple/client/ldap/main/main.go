@@ -295,7 +295,12 @@ func sync(src, dst *pool.LdapClient, stopCh <-chan struct{}) {
 
 			err = dstConn.Add(userCreateRequest)
 			if err != nil {
-				log.Fatalln(err)
+				if ldap.IsErrorWithCode(err, ldap.LDAPResultInvalidDNSyntax) {
+					log.Errorf("skip invalid username %s", username)
+					continue
+				} else {
+					log.Fatalln(err)
+				}
 			}
 			log.Infof("user %s sync success", username)
 		}
