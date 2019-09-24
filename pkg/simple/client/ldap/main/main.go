@@ -49,7 +49,7 @@ func (p *Proxy) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	client := &http.Client{}
 
 	//log.Printf("%v %v", r.Method, r.RequestURI)
-	req, err = http.NewRequest(r.Method, "http://localhost:9090"+r.URL.Path, r.Body)
+	req, err = http.NewRequest(r.Method, "http://localhost:9090"+r.RequestURI, r.Body)
 	for name, value := range r.Header {
 		req.Header.Set(name, value[0])
 	}
@@ -296,7 +296,10 @@ func sync(src, dst *pool.LdapClient, stopCh <-chan struct{}) {
 			err = dstConn.Add(userCreateRequest)
 			if err != nil {
 				if ldap.IsErrorWithCode(err, ldap.LDAPResultInvalidDNSyntax) {
-					log.Errorf("skip invalid username %s", username)
+					log.Errorf("skip invalid username %s, %s", username, srcDN)
+					continue
+				} else if ldap.IsErrorWithCode(err, ldap.LDAPResultInvalidAttributeSyntax) {
+					log.Errorf("skip invalid username %s, %s", username, srcDN)
 					continue
 				} else {
 					log.Fatalln(err)
