@@ -186,6 +186,9 @@ func main() {
 		log.Fatalln(err)
 	}
 
+	//c := dst.Ldap()
+	//createUserBaseDN(c)
+	//c.Close()
 	go func() {
 		ticker := time.NewTicker(syncInterval)
 		for {
@@ -231,20 +234,34 @@ func sync(src, dst *pool.LdapClient, stopCh <-chan struct{}) {
 	srcConn := src.Ldap()
 	defer srcConn.Close()
 
-	srcResult, err := srcConn.Search(&ldap.SearchRequest{
-		BaseDN:     viper.GetString("src.userSearchBase"),
-		Scope:      ldap.ScopeWholeSubtree,
-		Filter:     "(objectClass=person)",
-		Attributes: []string{viper.GetString("src.usernameAttribute"), viper.GetString("src.mailAttribute"), viper.GetString("src.descriptionAttribute")},
-	})
+	pageControl := ldap.NewControlPaging(1000)
+	srcEntries := make([]*ldap.Entry, 0)
 
-	if err != nil {
-		log.Fatalln(err)
+	for {
+		srcResult, err := srcConn.Search(&ldap.SearchRequest{
+			BaseDN:     viper.GetString("src.userSearchBase"),
+			Scope:      ldap.ScopeWholeSubtree,
+			Filter:     "(objectClass=person)",
+			Controls:   []ldap.Control{pageControl},
+			Attributes: []string{viper.GetString("src.usernameAttribute"), viper.GetString("src.mailAttribute"), viper.GetString("src.descriptionAttribute")},
+		})
+
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		u := ldap.FindControl(srcResult.Controls, ldap.ControlTypePaging)
+		srcEntries = append(srcEntries, srcResult.Entries...)
+
+		if ctrl, ok := u.(*ldap.ControlPaging); ctrl != nil && ok && len(ctrl.Cookie) != 0 {
+			pageControl.SetCookie(ctrl.Cookie)
+			continue
+		}
+
+		break
 	}
 
-	//createUserBaseDN(dstConn)
-
-	for _, entry := range srcResult.Entries {
+	for _, entry := range srcEntries {
 		username := entry.GetAttributeValue(viper.GetString("src.usernameAttribute"))
 		srcDN := entry.DN
 		description := entry.GetAttributeValue(viper.GetString("src.descriptionAttribute"))
@@ -309,32 +326,47 @@ func sync(src, dst *pool.LdapClient, stopCh <-chan struct{}) {
 		}
 	}
 
-	dstResult, err := dstConn.Search(&ldap.SearchRequest{
-		BaseDN:     viper.GetString("dst.userSearchBase"),
-		Scope:      ldap.ScopeWholeSubtree,
-		Filter:     fmt.Sprintf("(&(objectClass=inetOrgPerson)(homeDirectory=%s))", viper.GetString("src.userSearchBase")),
-		Attributes: []string{"uid", "homeDirectory"},
-	})
+	pageControl = ldap.NewControlPaging(1000)
+	dstEntries := make([]*ldap.Entry, 0)
 
-	if err != nil {
-		log.Fatalln(err)
+	for {
+		dstResult, err := dstConn.Search(&ldap.SearchRequest{
+			BaseDN:     viper.GetString("dst.userSearchBase"),
+			Scope:      ldap.ScopeWholeSubtree,
+			Filter:     fmt.Sprintf("(&(objectClass=inetOrgPerson)(homeDirectory=%s))", viper.GetString("src.userSearchBase")),
+			Attributes: []string{"uid", "homeDirectory"},
+		})
+
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		u := ldap.FindControl(dstResult.Controls, ldap.ControlTypePaging)
+		dstEntries = append(dstEntries, dstResult.Entries...)
+
+		if ctrl, ok := u.(*ldap.ControlPaging); ctrl != nil && ok && len(ctrl.Cookie) != 0 {
+			pageControl.SetCookie(ctrl.Cookie)
+			continue
+		}
+
+		break
 	}
 
-	for i, entry := range dstResult.Entries {
-
-		if isNotExist(srcResult.Entries, entry) {
+	for i := 0; i < len(dstEntries); i++ {
+		entry := dstEntries[i]
+		if isNotExist(srcEntries, entry) {
 			log.Infof("user %s has been delete", entry.GetAttributeValue("uid"))
 			deleteRequest := ldap.NewDelRequest(fmt.Sprintf("uid=%s,%s", entry.GetAttributeValue("uid"), viper.GetString("dst.userSearchBase")), nil)
 
-			if err = dstConn.Del(deleteRequest); err != nil {
-				log.Fatalln(err)
+			if err := dstConn.Del(deleteRequest); err != nil {
+				if !ldap.IsErrorWithCode(err, ldap.LDAPResultNoSuchObject) {
+					log.Fatalln(err)
+				}
 			}
-			dstResult.Entries = append(dstResult.Entries[:i], dstResult.Entries[i+1:]...)
+			dstEntries = append(dstEntries[:i], dstEntries[i+1:]...)
 			i--
 		}
 	}
-
-	log.Info(len(srcResult.Entries), len(dstResult.Entries))
 }
 
 func isNotExist(entries []*ldap.Entry, entry *ldap.Entry) bool {
