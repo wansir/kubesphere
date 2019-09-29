@@ -268,7 +268,7 @@ func sync(src, dst *pool.LdapClient) {
 		}
 		userCheckRequest := ldap.NewSearchRequest(
 			viper.GetString("dst.userSearchBase"),
-			ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 1, 0, false,
+			ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
 			fmt.Sprintf("(&(objectClass=inetOrgPerson)(|(uid=%s)(mail=%s)))", username, mail),
 			[]string{"uid", "mail", "homeDirectory"},
 			nil,
