@@ -186,14 +186,11 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	//c := dst.Ldap()
-	//createUserBaseDN(c)
-	//c.Close()
 	go func() {
 		ticker := time.NewTicker(syncInterval)
 		for {
 			log.Info("start sync")
-			sync(src, dst, stopChan)
+			sync(src, dst)
 			log.Info("sync success")
 			select {
 			case <-ticker.C:
@@ -218,23 +215,23 @@ func main() {
 func PrintHTTP(request *http.Request, response *http.Response) {
 	log.V(4).Infof("%v %v\n", request.Method, request.RequestURI)
 	for k, v := range request.Header {
-		log.V(4).Info(k, ":", v)
+		log.V(6).Info(k, ":", v)
 	}
-	log.V(4).Info("==============================")
-	log.V(4).Infof("HTTP/1.1 %v\n", response.Status)
+	log.V(6).Info("==============================")
+	log.V(6).Infof("HTTP/1.1 %v\n", response.Status)
 	for k, v := range response.Header {
-		log.V(4).Info(k, ":", v)
+		log.V(6).Info(k, ":", v)
 	}
-	log.V(4).Info("==============================")
+	log.V(6).Info("==============================")
 }
 
-func sync(src, dst *pool.LdapClient, stopCh <-chan struct{}) {
+func sync(src, dst *pool.LdapClient) {
 	dstConn := dst.Ldap()
 	defer dstConn.Close()
 	srcConn := src.Ldap()
 	defer srcConn.Close()
 
-	pageControl := ldap.NewControlPaging(1000)
+	pageControl := ldap.NewControlPaging(999)
 	srcEntries := make([]*ldap.Entry, 0)
 
 	for {
@@ -326,7 +323,7 @@ func sync(src, dst *pool.LdapClient, stopCh <-chan struct{}) {
 		}
 	}
 
-	pageControl = ldap.NewControlPaging(1000)
+	pageControl = ldap.NewControlPaging(999)
 	dstEntries := make([]*ldap.Entry, 0)
 
 	for {
