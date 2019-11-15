@@ -48,8 +48,7 @@ func (p *Proxy) ServeHTTP(wr http.ResponseWriter, r *http.Request) {
 	var req *http.Request
 	client := &http.Client{}
 
-	//log.Printf("%v %v", r.Method, r.RequestURI)
-	req, err = http.NewRequest(r.Method, "http://localhost:9090"+r.RequestURI, r.Body)
+	req, err = http.NewRequest(r.Method, "http://127.0.0.1:9090"+r.RequestURI, r.Body)
 	for name, value := range r.Header {
 		req.Header.Set(name, value[0])
 	}
@@ -107,7 +106,7 @@ func adInject(request *http.Request, resp http.ResponseWriter) bool {
 		if err == nil && len(result.Entries) > 0 {
 			err := srcConn.Bind(result.Entries[0].DN, loginRequest.Password)
 			if err == nil {
-				log.Info("登录成功")
+				log.Info("login success: " + loginRequest.Username)
 
 				dstUserSearchRequest := ldap.NewSearchRequest(
 					viper.GetString("dst.userSearchBase"),
@@ -131,7 +130,7 @@ func adInject(request *http.Request, resp http.ResponseWriter) bool {
 		}
 	}
 	data, _ := json.Marshal(loginRequest)
-	request.Body = ioutil.NopCloser(bytes.NewReader([]byte(data)))
+	request.Body = ioutil.NopCloser(bytes.NewReader(data))
 	return false
 }
 
@@ -207,7 +206,7 @@ func main() {
 	//go HandleHTTP()
 	proxy := NewProxy()
 
-	log.Info("proxy to http://localhost:9090")
+	log.Info("proxy to http://127.0.0.1:9090")
 	if err := http.ListenAndServe(":19090", proxy); err != nil {
 		log.Fatalln(err)
 	}
