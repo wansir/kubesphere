@@ -69,6 +69,7 @@ type User struct {
 	RoleBinding     string            `json:"role_binding,omitempty"`
 	RoleBindTime    *time.Time        `json:"role_bind_time,omitempty"`
 	WorkspaceRole   string            `json:"workspace_role,omitempty"`
+	Home            string            `json:"home,omitempty"`
 }
 
 type Group struct {
@@ -104,13 +105,6 @@ type PodInfo struct {
 	Namespace string `json:"namespace" description:"namespace"`
 	Pod       string `json:"pod" description:"pod name"`
 	Container string `json:"container" description:"container name"`
-}
-
-type AuthGrantResponse struct {
-	TokenType    string  `json:"token_type,omitempty"`
-	Token        string  `json:"access_token" description:"access token"`
-	ExpiresIn    float64 `json:"expires_in,omitempty"`
-	RefreshToken string  `json:"refresh_token,omitempty"`
 }
 
 type ResourceQuota struct {

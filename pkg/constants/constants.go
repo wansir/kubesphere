@@ -43,6 +43,7 @@ const (
 	OpenPitrixRuntimeAnnotationKey = "openpitrix_runtime"
 	WorkspaceAdmin                 = "workspace-admin"
 	ClusterAdmin                   = "cluster-admin"
+	ClusterRegular                 = "cluster-regular"
 	WorkspaceRegular               = "workspace-regular"
 	WorkspaceViewer                = "workspace-viewer"
 	WorkspacesManager              = "workspaces-manager"

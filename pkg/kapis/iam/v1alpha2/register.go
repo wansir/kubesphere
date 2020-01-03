@@ -20,6 +20,7 @@ package v1alpha2
 import (
 	"github.com/emicklei/go-restful"
 	"github.com/emicklei/go-restful-openapi"
+	"golang.org/x/oauth2"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"kubesphere.io/kubesphere/pkg/apiserver/iam"
@@ -27,6 +28,7 @@ import (
 	"kubesphere.io/kubesphere/pkg/constants"
 	"kubesphere.io/kubesphere/pkg/models"
 	"kubesphere.io/kubesphere/pkg/models/iam/policy"
+	ksoauth "kubesphere.io/kubesphere/pkg/models/oauth"
 	"kubesphere.io/kubesphere/pkg/server/errors"
 	"net/http"
 	"time"
@@ -120,6 +122,25 @@ func addWebService(c *restful.Container) error {
 
 	ok := "ok"
 
+	ws.Route(ws.GET("/oauth/configs").
+		To(iam.OAuthConfigs).
+		Doc("OAuth2 client configs").
+		Returns(http.StatusOK, ok, []ksoauth.PublicConfig{}).
+		Metadata(restfulspec.KeyOpenAPITags, []string{constants.IdentityManagementTag}))
+
+	ws.Route(ws.POST("/login/oauth/{name}").
+		To(iam.OAuthLogin).
+		Doc("OAuth2 client configs").
+		Returns(http.StatusOK, ok, []ksoauth.PublicConfig{}).
+		Metadata(restfulspec.KeyOpenAPITags, []string{constants.IdentityManagementTag}))
+
+	ws.Route(ws.POST("/oauth/access_token").
+		To(iam.OAuth).
+		Doc("OAuth API, support resource owner password credentials grant and oauth2 plugin").
+		Reads(iam.LoginRequest{}).
+		Returns(http.StatusOK, ok, oauth2.Token{}).
+		Metadata(restfulspec.KeyOpenAPITags, []string{constants.IdentityManagementTag}))
+
 	ws.Route(ws.POST("/authenticate").
 		To(iam.TokenReviewHandler).
 		Doc("TokenReview attempts to authenticate a token to a known user. Note: TokenReview requests may be cached by the webhook token authenticator plugin in the kube-apiserver.").
@@ -130,14 +151,9 @@ func addWebService(c *restful.Container) error {
 		To(iam.Login).
 		Doc("KubeSphere APIs support token-based authentication via the Authtoken request header. The POST Login API is used to retrieve the authentication token. After the authentication token is obtained, it must be inserted into the Authtoken header for all requests.").
 		Reads(iam.LoginRequest{}).
-		Returns(http.StatusOK, ok, models.AuthGrantResponse{}).
+		Returns(http.StatusOK, ok, oauth2.Token{}).
 		Metadata(restfulspec.KeyOpenAPITags, []string{constants.IdentityManagementTag}))
-	ws.Route(ws.POST("/token").
-		To(iam.OAuth).
-		Doc("OAuth API,only support resource owner password credentials grant").
-		Reads(iam.LoginRequest{}).
-		Returns(http.StatusOK, ok, models.AuthGrantResponse{}).
-		Metadata(restfulspec.KeyOpenAPITags, []string{constants.IdentityManagementTag}))
+
 	ws.Route(ws.GET("/users/{user}").
 		To(iam.DescribeUser).
 		Doc("Describe the specified user.").

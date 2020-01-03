@@ -18,10 +18,12 @@
 package iam
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/emicklei/go-restful"
+	"golang.org/x/oauth2"
 	"io/ioutil"
 	"k8s.io/klog"
 	"kubesphere.io/kubesphere/pkg/constants"
@@ -30,6 +32,7 @@ import (
 	"kubesphere.io/kubesphere/pkg/models/devops"
 	"kubesphere.io/kubesphere/pkg/models/kubeconfig"
 	"kubesphere.io/kubesphere/pkg/models/kubectl"
+	ksoauth "kubesphere.io/kubesphere/pkg/models/oauth"
 	"kubesphere.io/kubesphere/pkg/server/params"
 	clientset "kubesphere.io/kubesphere/pkg/simple/client"
 	"kubesphere.io/kubesphere/pkg/utils/k8sutil"
@@ -247,7 +250,88 @@ func createGroupsBaseDN() error {
 	return conn.Add(groupsCreateRequest)
 }
 
-func RefreshToken(refreshToken string) (*models.AuthGrantResponse, error) {
+func OAuthLogin(config *ksoauth.Config, code, ip string) (*oauth2.Token, error) {
+
+	oauthToken, err := config.TokenExchange(context.Background(), code)
+
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := config.GetUserInfo(oauthToken)
+
+	if err != nil {
+		return nil, err
+	}
+
+	existUser, err := GetUserInfo(user.Username)
+
+	if err != nil && !ldap.IsErrorWithCode(err, ldap.LDAPResultNoSuchObject) {
+		return nil, err
+	}
+
+	if existUser == nil {
+		existUser, err = CreateUser(&models.User{
+			Username:    user.Username,
+			Email:       user.Email,
+			Home:        config.Name,
+			ClusterRole: constants.ClusterRegular,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if existUser.Home != config.Name {
+		return nil, ldap.NewError(ldap.LDAPResultEntryAlreadyExists, fmt.Errorf("refused: user %s already exists", user.Username))
+	}
+
+	claims := jwt.MapClaims{}
+
+	// token without expiration time will auto sliding
+	claims["username"] = user.Username
+	claims["email"] = user.Email
+	claims["iat"] = time.Now().Unix()
+
+	token := jwtutil.MustSigned(claims)
+
+	redisClient, err := clientset.ClientSets().Redis()
+	if err != nil {
+		return nil, err
+	}
+
+	if !enableMultiLogin {
+		// multi login not allowed, remove the previous token
+		sessions, err := redisClient.Keys(fmt.Sprintf("kubesphere:users:%s:token:*", user.Username)).Result()
+
+		if err != nil {
+			klog.Errorln(err)
+			return nil, err
+		}
+
+		if len(sessions) > 0 {
+			klog.V(4).Infoln("revoke token", sessions)
+			err = redisClient.Del(sessions...).Err()
+			if err != nil {
+				klog.Errorln(err)
+				return nil, err
+			}
+		}
+	}
+
+	// cache token with expiration time
+	if err = redisClient.Set(fmt.Sprintf("kubesphere:users:%s:token:%s", user.Username, token), token, tokenIdleTimeout).Err(); err != nil {
+		klog.Errorln(err)
+		return nil, err
+	}
+
+	loginLog(user.Username, ip)
+
+	return &oauth2.Token{AccessToken: token}, nil
+}
+
+func RefreshToken(refreshToken string) (*oauth2.Token, error) {
 	validRefreshToken, err := jwtutil.ValidateToken(refreshToken)
 	if err != nil {
 		klog.Error(err)
@@ -268,7 +352,8 @@ func RefreshToken(refreshToken string) (*models.AuthGrantResponse, error) {
 	claims["username"] = payload["username"]
 	claims["email"] = payload["email"]
 	claims["iat"] = time.Now().Unix()
-	claims["exp"] = time.Now().Add(tokenIdleTimeout * 4).Unix()
+	expiry := time.Now().Add(tokenIdleTimeout * 4)
+	claims["exp"] = expiry.Unix()
 
 	token := jwtutil.MustSigned(claims)
 
@@ -281,10 +366,10 @@ func RefreshToken(refreshToken string) (*models.AuthGrantResponse, error) {
 
 	refreshToken = jwtutil.MustSigned(claims)
 
-	return &models.AuthGrantResponse{TokenType: "jwt", Token: token, RefreshToken: refreshToken, ExpiresIn: (tokenIdleTimeout * 4).Seconds()}, nil
+	return &oauth2.Token{TokenType: "bearer", AccessToken: token, RefreshToken: refreshToken, Expiry: expiry}, nil
 }
 
-func PasswordCredentialGrant(username, password, ip string) (*models.AuthGrantResponse, error) {
+func PasswordCredentialGrant(username, password, ip string) (*oauth2.Token, error) {
 	redisClient, err := clientset.ClientSets().Redis()
 	if err != nil {
 		return nil, err
@@ -353,7 +438,8 @@ func PasswordCredentialGrant(username, password, ip string) (*models.AuthGrantRe
 	claims["username"] = uid
 	claims["email"] = email
 	claims["iat"] = time.Now().Unix()
-	claims["exp"] = time.Now().Add(tokenIdleTimeout * 4).Unix()
+	expiry := time.Now().Add(tokenIdleTimeout * 4)
+	claims["exp"] = expiry.Unix()
 
 	token := jwtutil.MustSigned(claims)
 
@@ -387,11 +473,11 @@ func PasswordCredentialGrant(username, password, ip string) (*models.AuthGrantRe
 
 	loginLog(uid, ip)
 
-	return &models.AuthGrantResponse{TokenType: "jwt", Token: token, RefreshToken: refreshToken, ExpiresIn: (tokenIdleTimeout * 4).Seconds()}, nil
+	return &oauth2.Token{TokenType: "bearer", AccessToken: token, RefreshToken: refreshToken, Expiry: expiry}, nil
 }
 
 // User login
-func Login(username, password, ip string) (*models.AuthGrantResponse, error) {
+func Login(username, password, ip string) (*oauth2.Token, error) {
 
 	redisClient, err := clientset.ClientSets().Redis()
 	if err != nil {
@@ -491,7 +577,7 @@ func Login(username, password, ip string) (*models.AuthGrantResponse, error) {
 
 	loginLog(uid, ip)
 
-	return &models.AuthGrantResponse{Token: token}, nil
+	return &oauth2.Token{AccessToken: token}, nil
 }
 
 func loginLog(uid, ip string) {
@@ -563,10 +649,9 @@ func ListUsers(conditions *params.Conditions, orderBy string, reverse bool, limi
 			client.UserSearchBase(),
 			ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
 			filter,
-			[]string{"uid", "mail", "description", "preferredLanguage", "createTimestamp"},
+			[]string{"uid", "mail", "description", "preferredLanguage", "createTimestamp", "authtimestamp"},
 			[]ldap.Control{pageControl},
 		)
-
 		response, err := conn.Search(userSearchRequest)
 
 		if err != nil {
@@ -676,7 +761,7 @@ func GetUserInfo(username string) (*models.User, error) {
 		client.UserSearchBase(),
 		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
 		fmt.Sprintf("(&(objectClass=inetOrgPerson)(uid=%s))", username),
-		[]string{"mail", "description", "preferredLanguage", "createTimestamp"},
+		[]string{"mail", "description", "preferredLanguage", "createTimestamp", "homeDirectory"},
 		nil,
 	)
 
@@ -694,8 +779,9 @@ func GetUserInfo(username string) (*models.User, error) {
 	email := result.Entries[0].GetAttributeValue("mail")
 	description := result.Entries[0].GetAttributeValue("description")
 	lang := result.Entries[0].GetAttributeValue("preferredLanguage")
+	home := result.Entries[0].GetAttributeValue("homeDirectory")
 	createTimestamp, _ := time.Parse("20060102150405Z", result.Entries[0].GetAttributeValue("createTimestamp"))
-	user := &models.User{Username: username, Email: email, Description: description, Lang: lang, CreateTime: createTimestamp}
+	user := &models.User{Username: username, Email: email, Description: description, Lang: lang, CreateTime: createTimestamp, Home: home}
 
 	user.LastLoginTime = getLastLoginTime(username)
 
@@ -990,16 +1076,20 @@ func CreateUser(user *models.User) (*models.User, error) {
 
 	maxUid += 1
 
+	if user.Home == "" {
+		user.Home = "/home/" + user.Username
+	}
+
 	userCreateRequest := ldap.NewAddRequest(fmt.Sprintf("uid=%s,%s", user.Username, client.UserSearchBase()), nil)
 	userCreateRequest.Attribute("objectClass", []string{"inetOrgPerson", "posixAccount", "top"})
-	userCreateRequest.Attribute("cn", []string{user.Username})                       // RFC4519: common name(s) for which the entity is known by
-	userCreateRequest.Attribute("sn", []string{" "})                                 // RFC2256: last (family) name(s) for which the entity is known by
-	userCreateRequest.Attribute("gidNumber", []string{"500"})                        // RFC2307: An integer uniquely identifying a group in an administrative domain
-	userCreateRequest.Attribute("homeDirectory", []string{"/home/" + user.Username}) // The absolute path to the home directory
-	userCreateRequest.Attribute("uid", []string{user.Username})                      // RFC4519: user identifier
-	userCreateRequest.Attribute("uidNumber", []string{strconv.Itoa(maxUid)})         // RFC2307: An integer uniquely identifying a user in an administrative domain
-	userCreateRequest.Attribute("mail", []string{user.Email})                        // RFC1274: RFC822 Mailbox
-	userCreateRequest.Attribute("userPassword", []string{user.Password})             // RFC4519/2307: password of user
+	userCreateRequest.Attribute("cn", []string{user.Username})               // RFC4519: common name(s) for which the entity is known by
+	userCreateRequest.Attribute("sn", []string{" "})                         // RFC2256: last (family) name(s) for which the entity is known by
+	userCreateRequest.Attribute("gidNumber", []string{"500"})                // RFC2307: An integer uniquely identifying a group in an administrative domain
+	userCreateRequest.Attribute("homeDirectory", []string{user.Home})        // The absolute path to the home directory
+	userCreateRequest.Attribute("uid", []string{user.Username})              // RFC4519: user identifier
+	userCreateRequest.Attribute("uidNumber", []string{strconv.Itoa(maxUid)}) // RFC2307: An integer uniquely identifying a user in an administrative domain
+	userCreateRequest.Attribute("mail", []string{user.Email})                // RFC1274: RFC822 Mailbox
+	userCreateRequest.Attribute("userPassword", []string{user.Password})     // RFC4519/2307: password of user
 	if user.Lang != "" {
 		userCreateRequest.Attribute("preferredLanguage", []string{user.Lang})
 	}

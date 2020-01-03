@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/emicklei/go-restful"
+	"golang.org/x/oauth2"
 	"k8s.io/klog"
-	"kubesphere.io/kubesphere/pkg/models"
 	"kubesphere.io/kubesphere/pkg/models/iam"
 	"kubesphere.io/kubesphere/pkg/server/errors"
 	"kubesphere.io/kubesphere/pkg/utils/iputil"
@@ -55,6 +55,7 @@ type OAuthRequest struct {
 	GrantType    string `json:"grant_type"`
 	Username     string `json:"username,omitempty" description:"username"`
 	Password     string `json:"password,omitempty" description:"password"`
+	Code         string `json:"code,omitempty" description:"code"`
 	RefreshToken string `json:"refresh_token,omitempty"`
 }
 
@@ -98,7 +99,7 @@ func OAuth(req *restful.Request, resp *restful.Response) {
 		resp.WriteHeaderAndEntity(http.StatusBadRequest, errors.Wrap(err))
 		return
 	}
-	var result *models.AuthGrantResponse
+	var result *oauth2.Token
 	switch authRequest.GrantType {
 	case "refresh_token":
 		result, err = iam.RefreshToken(authRequest.RefreshToken)
@@ -106,9 +107,7 @@ func OAuth(req *restful.Request, resp *restful.Response) {
 		ip := iputil.RemoteIp(req.Request)
 		result, err = iam.PasswordCredentialGrant(authRequest.Username, authRequest.Password, ip)
 	default:
-		resp.Header().Set("WWW-Authenticate", "grant_type is not supported")
-		resp.WriteHeaderAndEntity(http.StatusUnauthorized, errors.Wrap(fmt.Errorf("grant_type is not supported")))
-		return
+		err = fmt.Errorf("grant_type %s is not supported", authRequest.GrantType)
 	}
 
 	if err != nil {

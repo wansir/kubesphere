@@ -7,7 +7,7 @@ import (
 )
 
 type RedisOptions struct {
-	RedisURL string
+	RedisURL string `json:"redisURL"`
 }
 
 // NewRedisOptions returns options points to nowhere,
