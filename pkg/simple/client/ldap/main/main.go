@@ -262,6 +262,10 @@ func sync(src, dst *pool.LdapClient) {
 		srcDN := entry.DN
 		description := entry.GetAttributeValue(viper.GetString("src.descriptionAttribute"))
 		mail := entry.GetAttributeValue(viper.GetString("src.mailAttribute"))
+		if len(strings.TrimSpace(username)) == 0 {
+			continue
+		}
+
 		if mail == "" {
 			mail = convertDNToMail(username, srcDN)
 		}
