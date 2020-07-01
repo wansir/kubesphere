@@ -1,6 +1,6 @@
 /*
  *
- * Copyright 2020 The KubeSphere Authors.
+ * Copyright 2019 The KubeSphere Authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,8 +33,6 @@ import (
 	"kubesphere.io/kubesphere/pkg/utils/signals"
 	"net/http"
 	"strconv"
-	"strings"
-	"time"
 )
 
 type Proxy struct {
@@ -90,45 +88,110 @@ func adInject(request *http.Request, resp http.ResponseWriter) bool {
 	requestBody, err := ioutil.ReadAll(request.Body)
 	var loginRequest LoginRequest
 	err = json.Unmarshal(requestBody, &loginRequest)
-	if err == nil {
-		srcConn := src.Ldap()
-		defer srcConn.Close()
-		dstConn := dst.Ldap()
-		defer dstConn.Close()
-		userSearchRequest := ldap.NewSearchRequest(
-			viper.GetString("src.userSearchBase"),
+
+	if err != nil {
+		return false
+	}
+
+	srcConn := src.Ldap()
+	defer srcConn.Close()
+	dstConn := dst.Ldap()
+	defer dstConn.Close()
+	userSearchRequest := ldap.NewSearchRequest(
+		viper.GetString("src.userSearchBase"),
+		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 1, 0, false,
+		fmt.Sprintf("(&(objectClass=person)(%s=%s))", viper.GetString("src.usernameAttribute"), loginRequest.Username),
+		[]string{viper.GetString("src.usernameAttribute"), viper.GetString("src.mailAttribute"), viper.GetString("src.descriptionAttribute")},
+		nil,
+	)
+	result, err := srcConn.Search(userSearchRequest)
+
+	// if user find in remote ldap server
+	if err == nil && len(result.Entries) > 0 {
+		user := result.Entries[0]
+
+		// check password from remote ldap server
+		err := srcConn.Bind(result.Entries[0].DN, loginRequest.Password)
+
+		if ldap.IsErrorWithCode(err, ldap.LDAPResultInvalidCredentials) {
+			resp.Header().Add("Content-Type", "application/json")
+			resp.WriteHeader(http.StatusUnauthorized)
+			data, _ := json.Marshal(LoginResponse{Message: "incorrect username or password"})
+			resp.Write(data)
+			return true
+		} else if err != nil {
+			resp.Header().Add("Content-Type", "application/json")
+			resp.WriteHeader(http.StatusInternalServerError)
+			data, _ := json.Marshal(LoginResponse{Message: err.Error()})
+			resp.Write(data)
+			return true
+		}
+
+		// if login success create user if not exist in ks ldap server
+		dstUserSearchRequest := ldap.NewSearchRequest(
+			viper.GetString("dst.userSearchBase"),
 			ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 1, 0, false,
-			fmt.Sprintf("(&(objectClass=person)(%s=%s))", viper.GetString("src.usernameAttribute"), loginRequest.Username),
-			[]string{viper.GetString("src.usernameAttribute")},
+			fmt.Sprintf("(&(objectClass=inetOrgPerson)(uid=%s))", loginRequest.Username),
+			[]string{"sn"},
 			nil,
 		)
-		result, err := srcConn.Search(userSearchRequest)
-		if err == nil && len(result.Entries) > 0 {
-			err := srcConn.Bind(result.Entries[0].DN, loginRequest.Password)
-			if err == nil {
-				log.Info("login success: " + loginRequest.Username)
 
-				dstUserSearchRequest := ldap.NewSearchRequest(
-					viper.GetString("dst.userSearchBase"),
-					ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 1, 0, false,
-					fmt.Sprintf("(&(objectClass=inetOrgPerson)(uid=%s))", loginRequest.Username),
-					[]string{"sn"},
-					nil,
-				)
-				dstResult, err := dstConn.Search(dstUserSearchRequest)
-				if err == nil && len(dstResult.Entries) > 0 {
-					loginRequest.Password = dstResult.Entries[0].GetAttributeValue("sn")
-				}
-			}
-			if ldap.IsErrorWithCode(err, ldap.LDAPResultInvalidCredentials) {
+		dstResult, err := dstConn.Search(dstUserSearchRequest)
+
+		if (dstResult != nil && len(dstResult.Entries) == 0) || ldap.IsErrorWithCode(err, ldap.LDAPResultNoSuchObject) {
+
+			maxUid, err := getMaxUid(dstConn)
+
+			if err != nil {
 				resp.Header().Add("Content-Type", "application/json")
-				resp.WriteHeader(http.StatusUnauthorized)
-				data, _ := json.Marshal(LoginResponse{Message: "incorrect username or password"})
+				resp.WriteHeader(http.StatusInternalServerError)
+				data, _ := json.Marshal(LoginResponse{Message: err.Error()})
 				resp.Write(data)
 				return true
 			}
+
+			maxUid += 1
+
+			pwd := uuid.New().String()
+			userCreateRequest := ldap.NewAddRequest(fmt.Sprintf("uid=%s,%s", user.GetAttributeValue(viper.GetString("src.usernameAttribute")), viper.GetString("dst.userSearchBase")), nil)
+			userCreateRequest.Attribute("objectClass", []string{"inetOrgPerson", "posixAccount", "top"})
+			userCreateRequest.Attribute("cn", []string{user.GetAttributeValue("uid")})                    // RFC4519: common name(s) for which the entity is known by
+			userCreateRequest.Attribute("sn", []string{pwd})                                              // RFC2256: last (family) name(s) for which the entity is known by
+			userCreateRequest.Attribute("gidNumber", []string{"500"})                                     // RFC2307: An integer uniquely identifying a group in an administrative domain
+			userCreateRequest.Attribute("homeDirectory", []string{viper.GetString("src.userSearchBase")}) // The absolute path to the home directory
+			userCreateRequest.Attribute("uid", []string{user.GetAttributeValue("uid")})                   // RFC4519: user identifier
+			userCreateRequest.Attribute("uidNumber", []string{strconv.Itoa(maxUid)})                      // RFC2307: An integer uniquely identifying a user in an administrative domain
+			userCreateRequest.Attribute("mail", []string{viper.GetString("src.mailAttribute")})           // RFC1274: RFC822 Mailbox
+			userCreateRequest.Attribute("userPassword", []string{pwd})                                    // RFC4519/2307: password of user
+			userCreateRequest.Attribute("preferredLanguage", []string{"zh"})
+			description := user.GetAttributeValue(viper.GetString("src.descriptionAttribute"))
+			if description != "" {
+				userCreateRequest.Attribute("description", []string{description}) // RFC4519: descriptive information
+			}
+
+			err = dstConn.Add(userCreateRequest)
+			if err != nil {
+				resp.Header().Add("Content-Type", "application/json")
+				resp.WriteHeader(http.StatusUnauthorized)
+				data, _ := json.Marshal(LoginResponse{Message: err.Error()})
+				resp.Write(data)
+				return true
+			}
+			log.Infof("user %s sync success", user.GetAttributeValue(viper.GetString("src.usernameAttribute")))
+			loginRequest.Password = pwd
+		} else {
+			if err != nil {
+				resp.Header().Add("Content-Type", "application/json")
+				resp.WriteHeader(http.StatusUnauthorized)
+				data, _ := json.Marshal(LoginResponse{Message: err.Error()})
+				resp.Write(data)
+				return true
+			}
+			loginRequest.Password = dstResult.Entries[0].GetAttributeValue("sn")
 		}
+
 	}
+
 	data, _ := json.Marshal(loginRequest)
 	request.Body = ioutil.NopCloser(bytes.NewReader(data))
 	return false
@@ -159,11 +222,7 @@ func main() {
 
 	viper.Debug()
 
-	syncInterval, err := time.ParseDuration(viper.GetString("sync.interval"))
-
-	if err != nil {
-		log.Fatalln(err)
-	}
+	var err error
 
 	src, err = pool.NewLdapClient(&pool.LdapOptions{
 		Host:            viper.GetString("src.host"),
@@ -185,24 +244,6 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	go func() {
-		ticker := time.NewTicker(syncInterval)
-		for {
-			log.Info("start sync")
-			sync(src, dst)
-			log.Info("sync success")
-			select {
-			case <-ticker.C:
-				continue
-			case _, ok := <-stopChan:
-				if !ok {
-					log.Info("exit")
-					return
-				}
-			}
-		}
-	}()
-
 	proxy := NewProxy()
 
 	log.Info("proxy to http://127.0.0.1:9090")
@@ -221,178 +262,6 @@ func PrintHTTP(request *http.Request, response *http.Response) {
 		log.V(6).Info(k, ":", v)
 	}
 	log.V(6).Info("==============================")
-}
-
-func sync(src, dst *pool.LdapClient) {
-	dstConn := dst.Ldap()
-	defer dstConn.Close()
-	srcConn := src.Ldap()
-	defer srcConn.Close()
-
-	pageControl := ldap.NewControlPaging(999)
-	srcEntries := make([]*ldap.Entry, 0)
-
-	for {
-		srcResult, err := srcConn.Search(&ldap.SearchRequest{
-			BaseDN:     viper.GetString("src.userSearchBase"),
-			Scope:      ldap.ScopeWholeSubtree,
-			Filter:     "(objectClass=person)",
-			Controls:   []ldap.Control{pageControl},
-			Attributes: []string{viper.GetString("src.usernameAttribute"), viper.GetString("src.mailAttribute"), viper.GetString("src.descriptionAttribute")},
-		})
-
-		if err != nil {
-			log.Fatalln(err)
-		}
-
-		u := ldap.FindControl(srcResult.Controls, ldap.ControlTypePaging)
-		srcEntries = append(srcEntries, srcResult.Entries...)
-
-		if ctrl, ok := u.(*ldap.ControlPaging); ctrl != nil && ok && len(ctrl.Cookie) != 0 {
-			pageControl.SetCookie(ctrl.Cookie)
-			continue
-		}
-
-		break
-	}
-
-	maxUid := 0
-
-	for _, entry := range srcEntries {
-		username := entry.GetAttributeValue(viper.GetString("src.usernameAttribute"))
-		srcDN := entry.DN
-		description := entry.GetAttributeValue(viper.GetString("src.descriptionAttribute"))
-		mail := entry.GetAttributeValue(viper.GetString("src.mailAttribute"))
-		if len(strings.TrimSpace(username)) == 0 {
-			continue
-		}
-
-		if mail == "" {
-			mail = convertDNToMail(username, srcDN)
-		}
-		userCheckRequest := ldap.NewSearchRequest(
-			viper.GetString("dst.userSearchBase"),
-			ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
-			fmt.Sprintf("(&(objectClass=inetOrgPerson)((uid=%s)))", username),
-			[]string{"uid"},
-			nil,
-		)
-
-		checkResult, err := dstConn.Search(userCheckRequest)
-
-		if err != nil {
-			log.Fatalln(err)
-		}
-
-		if len(checkResult.Entries) > 0 {
-			log.Infof("user %s exist", username)
-			continue
-		} else {
-			if maxUid == 0 {
-				maxUid, err = getMaxUid(dstConn)
-				if err != nil {
-					log.Fatalln(err)
-				}
-			}
-
-			maxUid += 1
-
-			pwd := uuid.New().String()
-			userCreateRequest := ldap.NewAddRequest(fmt.Sprintf("uid=%s,%s", username, viper.GetString("dst.userSearchBase")), nil)
-			userCreateRequest.Attribute("objectClass", []string{"inetOrgPerson", "posixAccount", "top"})
-			userCreateRequest.Attribute("cn", []string{username})                    // RFC4519: common name(s) for which the entity is known by
-			userCreateRequest.Attribute("sn", []string{pwd})                         // RFC2256: last (family) name(s) for which the entity is known by
-			userCreateRequest.Attribute("gidNumber", []string{"500"})                // RFC2307: An integer uniquely identifying a group in an administrative domain
-			userCreateRequest.Attribute("homeDirectory", []string{"/" + username})                 // The absolute path to the home directory
-			userCreateRequest.Attribute("uid", []string{username})                   // RFC4519: user identifier
-			userCreateRequest.Attribute("uidNumber", []string{strconv.Itoa(maxUid)}) // RFC2307: An integer uniquely identifying a user in an administrative domain
-			userCreateRequest.Attribute("mail", []string{mail})                      // RFC1274: RFC822 Mailbox
-			userCreateRequest.Attribute("userPassword", []string{pwd})               // RFC4519/2307: password of user
-			userCreateRequest.Attribute("preferredLanguage", []string{"zh"})
-			if description != "" {
-				userCreateRequest.Attribute("description", []string{description}) // RFC4519: descriptive information
-			}
-
-			err = dstConn.Add(userCreateRequest)
-			if err != nil {
-				if ldap.IsErrorWithCode(err, ldap.LDAPResultInvalidDNSyntax) {
-					log.Errorf("skip invalid username %s, %s", username, srcDN)
-					continue
-				} else if ldap.IsErrorWithCode(err, ldap.LDAPResultInvalidAttributeSyntax) {
-					log.Errorf("skip invalid username %s, %s", username, srcDN)
-					continue
-				} else {
-					log.Fatalln(err)
-				}
-			}
-			log.Infof("user %s sync success", username)
-		}
-	}
-
-	pageControl = ldap.NewControlPaging(999)
-	dstEntries := make([]*ldap.Entry, 0)
-
-	for {
-		dstResult, err := dstConn.Search(&ldap.SearchRequest{
-			BaseDN:     viper.GetString("dst.userSearchBase"),
-			Scope:      ldap.ScopeWholeSubtree,
-			Filter:     fmt.Sprintf("(&(objectClass=inetOrgPerson)(homeDirectory=%s))", viper.GetString("src.userSearchBase")),
-			Attributes: []string{"uid", "homeDirectory"},
-		})
-
-		if err != nil {
-			log.Fatalln(err)
-		}
-
-		u := ldap.FindControl(dstResult.Controls, ldap.ControlTypePaging)
-		dstEntries = append(dstEntries, dstResult.Entries...)
-
-		if ctrl, ok := u.(*ldap.ControlPaging); ctrl != nil && ok && len(ctrl.Cookie) != 0 {
-			pageControl.SetCookie(ctrl.Cookie)
-			continue
-		}
-
-		break
-	}
-
-	for i := 0; i < len(dstEntries); i++ {
-		entry := dstEntries[i]
-		if isNotExist(srcEntries, entry) {
-			log.Infof("user %s has been delete", entry.GetAttributeValue("uid"))
-			deleteRequest := ldap.NewDelRequest(fmt.Sprintf("uid=%s,%s", entry.GetAttributeValue("uid"), viper.GetString("dst.userSearchBase")), nil)
-
-			if err := dstConn.Del(deleteRequest); err != nil {
-				if !ldap.IsErrorWithCode(err, ldap.LDAPResultNoSuchObject) {
-					log.Fatalln(err)
-				}
-			}
-			dstEntries = append(dstEntries[:i], dstEntries[i+1:]...)
-			i--
-		}
-	}
-}
-
-func isNotExist(entries []*ldap.Entry, entry *ldap.Entry) bool {
-	for _, e := range entries {
-		if e.GetAttributeValue(viper.GetString("src.usernameAttribute")) == entry.GetAttributeValue("uid") {
-			return false
-		}
-	}
-	return true
-}
-
-func convertDNToMail(username, dn string) string {
-	groups := strings.Split(dn, ",")
-	domain := username + "@"
-	for _, g := range groups {
-		g2 := strings.Split(g, "=")
-		if strings.EqualFold(g2[0], "dc") {
-			domain += g2[1]
-			domain += "."
-		}
-	}
-	domain = strings.TrimSuffix(domain, ".")
-	return domain
 }
 
 func getMaxUid(conn ldap.Client) (int, error) {
