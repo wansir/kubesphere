@@ -24,8 +24,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	kubesphere "kubesphere.io/kubesphere/pkg/client/clientset/versioned"
-	//application "sigs.k8s.io/application/pkg/client/clientset/versioned"
-	//applicationclientset "sigs.k8s.io/application/pkg/client/clientset/versioned"
+	application "kubesphere.io/kubesphere/pkg/simple/client/app/clientset/versioned"
+	applicationclientset "kubesphere.io/kubesphere/pkg/simple/client/app/clientset/versioned"
 )
 
 type FakeClient struct {
@@ -38,7 +38,7 @@ type FakeClient struct {
 	// generated clientset
 	KubeSphereClient kubesphere.Interface
 
-	ApplicationClient interface{}
+	ApplicationClient applicationclientset.Interface
 
 	IstioClient istioclient.Interface
 
@@ -52,7 +52,7 @@ type FakeClient struct {
 }
 
 func NewFakeClientSets(k8sClient kubernetes.Interface, discoveryClient *discovery.DiscoveryClient,
-	kubeSphereClient kubesphere.Interface, applicationClient interface{},
+	kubeSphereClient kubesphere.Interface, applicationClient applicationclientset.Interface,
 	istioClient istioclient.Interface, snapshotClient snapshotclient.Interface,
 	apiextensionsclient apiextensionsclient.Interface, masterURL string, kubeConfig *rest.Config) Client {
 	return &FakeClient{
@@ -80,7 +80,7 @@ func (n *FakeClient) Istio() istioclient.Interface {
 	return n.IstioClient
 }
 
-func (n *FakeClient) Application() interface{} {
+func (n *FakeClient) Application() application.Interface {
 	return n.ApplicationClient
 }
 
