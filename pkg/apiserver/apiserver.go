@@ -471,8 +471,6 @@ func (s *APIServer) waitForResourceSync(stopCh <-chan struct{}) error {
 	ksInformerFactory.Start(stopCh)
 	ksInformerFactory.WaitForCacheSync(stopCh)
 
-	appInformerFactory := s.InformerFactory.ApplicationSharedInformerFactory()
-
 	appGVRs := []schema.GroupVersionResource{
 		{Group: "app.k8s.io", Version: "v1beta1", Resource: "applications"},
 	}
@@ -480,16 +478,8 @@ func (s *APIServer) waitForResourceSync(stopCh <-chan struct{}) error {
 	for _, gvr := range appGVRs {
 		if !isResourceExists(gvr) {
 			klog.Warningf("resource %s not exists in the cluster", gvr)
-		} else {
-			_, err = appInformerFactory.ForResource(gvr)
-			if err != nil {
-				return err
-			}
 		}
 	}
-
-	appInformerFactory.Start(stopCh)
-	appInformerFactory.WaitForCacheSync(stopCh)
 
 	snapshotInformerFactory := s.InformerFactory.SnapshotSharedInformerFactory()
 	snapshotGVRs := []schema.GroupVersionResource{
