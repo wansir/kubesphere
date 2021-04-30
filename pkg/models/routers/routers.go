@@ -21,6 +21,7 @@ import (
 	"io/ioutil"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -39,12 +40,14 @@ var routerNodeIPLabelSelector = map[string]string{
 }
 
 const (
-	servicemeshEnabled         = "servicemesh.kubesphere.io/enabled"
-	sidecarInject              = "sidecar.istio.io/inject"
-	ingressControllerFolder    = "/etc/kubesphere/ingress-controller"
-	ingressControllerPrefix    = "kubesphere-router-"
-	ingressControllerNamespace = "kubesphere-controls-system"
-	configMapSuffix            = "-nginx"
+	servicemeshEnabled      = "servicemesh.kubesphere.io/enabled"
+	sidecarInject           = "sidecar.istio.io/inject"
+	ingressControllerFolder = "/etc/kubesphere/ingress-controller"
+	ingressControllerPrefix = "kubesphere-router-"
+	configMapSuffix         = "-nginx"
+	serviceAccountName      = "kubesphere-router-serviceaccount"
+	roleName                = "system:kubesphere-router-role"
+	roleBindingName         = "nginx-ingress-role-nisa-binding"
 )
 
 type RouterOperator interface {
@@ -82,6 +85,12 @@ func NewRouterOperator(client kubernetes.Interface, informers informers.SharedIn
 			routerTemplates["SERVICE"] = obj
 		case *v1.Deployment:
 			routerTemplates["DEPLOYMENT"] = obj
+		case *rbacv1.Role:
+			routerTemplates["ROLE"] = obj
+		case *rbacv1.RoleBinding:
+			routerTemplates["ROLEBINDINGS"] = obj
+		case *corev1.ServiceAccount:
+			routerTemplates["SERVICEACCOUNT"] = obj
 		}
 	}
 
@@ -153,7 +162,7 @@ func (c *routerOperator) GetRouter(namespace string) (*corev1.Service, error) {
 func (c *routerOperator) getRouterService(namespace string) (*corev1.Service, error) {
 	serviceName := ingressControllerPrefix + namespace
 	serviceLister := c.informers.Core().V1().Services().Lister()
-	service, err := serviceLister.Services(ingressControllerNamespace).Get(serviceName)
+	service, err := serviceLister.Services(namespace).Get(serviceName)
 
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -201,7 +210,13 @@ func (c *routerOperator) CreateRouter(namespace string, routerType corev1.Servic
 		}
 	}
 
-	err := c.createOrUpdateRouterWorkload(namespace, routerType == corev1.ServiceTypeLoadBalancer, injectSidecar)
+	err := c.GrantPrivelges(namespace)
+	if err != nil {
+		klog.Error(err)
+		return nil, err
+	}
+
+	err = c.createOrUpdateRouterWorkload(namespace, routerType == corev1.ServiceTypeLoadBalancer, injectSidecar)
 	if err != nil {
 		klog.Error(err)
 		return nil, err
@@ -221,7 +236,13 @@ func (c *routerOperator) CreateRouter(namespace string, routerType corev1.Servic
 // DeleteRouter is used to delete ingress controller related resources in namespace
 // It will not delete ClusterRole resource cause it maybe used by other controllers
 func (c *routerOperator) DeleteRouter(namespace string) (*corev1.Service, error) {
-	err := c.deleteRouterWorkload(namespace)
+
+	err := c.deletePriveleges(namespace)
+	if err != nil {
+		klog.Error(err)
+	}
+
+	err = c.deleteRouterWorkload(namespace)
 	if err != nil {
 		klog.Error(err)
 	}
@@ -251,7 +272,7 @@ func (c *routerOperator) createRouterService(namespace string, routerType corev1
 	// Add project selector
 	service.Labels["project"] = namespace
 	service.Spec.Selector["project"] = namespace
-	service, err := c.client.CoreV1().Services(ingressControllerNamespace).Create(service)
+	service, err := c.client.CoreV1().Services(namespace).Create(service)
 	if err != nil {
 		klog.Error(err)
 		return nil, err
@@ -269,7 +290,7 @@ func (c *routerOperator) updateRouterService(namespace string, routerType corev1
 
 	service.Spec.Type = routerType
 	service.SetAnnotations(annotations)
-	service, err = c.client.CoreV1().Services(ingressControllerNamespace).Update(service)
+	service, err = c.client.CoreV1().Services(namespace).Update(service)
 	return service, err
 }
 
@@ -285,13 +306,71 @@ func (c *routerOperator) deleteRouterService(namespace string) (*corev1.Service,
 	serviceName := ingressControllerPrefix + namespace
 	deleteOptions := metav1.DeleteOptions{}
 
-	err = c.client.CoreV1().Services(ingressControllerNamespace).Delete(serviceName, &deleteOptions)
+	err = c.client.CoreV1().Services(namespace).Delete(serviceName, &deleteOptions)
 	if err != nil {
 		klog.Error(err)
 		return service, err
 	}
 
 	return service, nil
+}
+
+func (c *routerOperator) GrantPrivelges(namespace string) error {
+
+	sa, err := c.client.CoreV1().ServiceAccounts(namespace).Get(serviceAccountName, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			obj, ok := c.routerTemplates["SERVICEACCOUNT"]
+			if !ok {
+				klog.Error("serviceAccount template file not loaded")
+				return fmt.Errorf("serviceAccount template file not loaded")
+			}
+			sa = obj.(*corev1.ServiceAccount)
+			sa.Namespace = namespace
+			_, err = c.client.CoreV1().ServiceAccounts(namespace).Create(sa)
+			if err != nil {
+				klog.Error(err)
+				return err
+			}
+		}
+	}
+
+	role, err := c.client.RbacV1().Roles(namespace).Get(roleName, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			obj, ok := c.routerTemplates["ROLE"]
+			if !ok {
+				klog.Error("role template file not loaded")
+				return fmt.Errorf("role template file not loaded")
+			}
+			role = obj.(*rbacv1.Role)
+			role.Namespace = namespace
+			_, err = c.client.RbacV1().Roles(namespace).Create(role)
+			if err != nil {
+				klog.Error(err)
+				return err
+			}
+		}
+	}
+
+	roleBinding, err := c.client.RbacV1().RoleBindings(namespace).Get(roleBindingName, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			obj, ok := c.routerTemplates["ROLEBINDINGS"]
+			if !ok {
+				klog.Error("roleBinding template file not loaded")
+				return fmt.Errorf("roleBinding template file not loaded")
+			}
+			roleBinding = obj.(*rbacv1.RoleBinding)
+			roleBinding.Namespace = namespace
+			_, err = c.client.RbacV1().RoleBindings(namespace).Create(roleBinding)
+			if err != nil {
+				klog.Error(err)
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (c *routerOperator) createOrUpdateRouterWorkload(namespace string, publishService bool, servicemeshEnabled bool) error {
@@ -303,7 +382,7 @@ func (c *routerOperator) createOrUpdateRouterWorkload(namespace string, publishS
 
 	deployName := ingressControllerPrefix + namespace
 
-	deployment, err := c.client.AppsV1().Deployments(ingressControllerNamespace).Get(deployName, metav1.GetOptions{})
+	deployment, err := c.client.AppsV1().Deployments(namespace).Get(deployName, metav1.GetOptions{})
 
 	createDeployment := true
 
@@ -357,15 +436,15 @@ func (c *routerOperator) createOrUpdateRouterWorkload(namespace string, publishS
 	}
 
 	if publishService {
-		deployment.Spec.Template.Spec.Containers[0].Args = append(deployment.Spec.Template.Spec.Containers[0].Args, "--publish-service="+ingressControllerNamespace+"/"+ingressControllerPrefix+namespace)
+		deployment.Spec.Template.Spec.Containers[0].Args = append(deployment.Spec.Template.Spec.Containers[0].Args, "--publish-service="+namespace+"/"+ingressControllerPrefix+namespace)
 	} else {
 		deployment.Spec.Template.Spec.Containers[0].Args = append(deployment.Spec.Template.Spec.Containers[0].Args, "--report-node-internal-ip-address")
 	}
 
 	if createDeployment {
-		deployment, err = c.client.AppsV1().Deployments(ingressControllerNamespace).Create(deployment)
+		deployment, err = c.client.AppsV1().Deployments(namespace).Create(deployment)
 	} else {
-		deployment, err = c.client.AppsV1().Deployments(ingressControllerNamespace).Update(deployment)
+		deployment, err = c.client.AppsV1().Deployments(namespace).Update(deployment)
 	}
 
 	if err != nil {
@@ -376,11 +455,31 @@ func (c *routerOperator) createOrUpdateRouterWorkload(namespace string, publishS
 	return nil
 }
 
+func (c *routerOperator) deletePriveleges(namespace string) error {
+	deleteOptions := metav1.DeleteOptions{}
+	err := c.client.CoreV1().ServiceAccounts(namespace).Delete(serviceAccountName, &deleteOptions)
+	if err != nil {
+		klog.Error(err)
+	}
+
+	err = c.client.RbacV1().RoleBindings(namespace).Delete(roleBindingName, &deleteOptions)
+	if err != nil {
+		klog.Error(err)
+	}
+
+	err = c.client.RbacV1().Roles(namespace).Delete(roleName, &deleteOptions)
+	if err != nil {
+		klog.Error(err)
+	}
+
+	return nil
+}
+
 func (c *routerOperator) deleteRouterWorkload(namespace string) error {
 	deleteOptions := metav1.DeleteOptions{}
 	// delete controller deployment
 	deploymentName := ingressControllerPrefix + namespace
-	err := c.client.AppsV1().Deployments(ingressControllerNamespace).Delete(deploymentName, &deleteOptions)
+	err := c.client.AppsV1().Deployments(namespace).Delete(deploymentName, &deleteOptions)
 	if err != nil {
 		klog.Error(err)
 	}
@@ -394,13 +493,13 @@ func (c *routerOperator) deleteRouterWorkload(namespace string) error {
 			"project":   namespace,
 		})
 	replicaSetLister := c.informers.Apps().V1().ReplicaSets().Lister()
-	replicaSets, err := replicaSetLister.ReplicaSets(ingressControllerNamespace).List(selector)
+	replicaSets, err := replicaSetLister.ReplicaSets(namespace).List(selector)
 	if err != nil {
 		klog.Error(err)
 	}
 
 	for i := range replicaSets {
-		err = c.client.AppsV1().ReplicaSets(ingressControllerNamespace).Delete(replicaSets[i].Name, &deleteOptions)
+		err = c.client.AppsV1().ReplicaSets(namespace).Delete(replicaSets[i].Name, &deleteOptions)
 		if err != nil {
 			klog.Error(err)
 		}
