@@ -1,14 +1,14 @@
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
   annotations:
     kubernetes.io/created-by: kubesphere.io/ks-router
-  name: nginx-ingress-role-nisa-binding
+  name: system:nginx-ingress-clusterrole-binding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: system:kubesphere-router-role
+  kind: ClusterRole
+  name: system:kubesphere-router-clusterrole
 subjects:
 - kind: ServiceAccount
   name: kubesphere-router-serviceaccount
-
+  namespace: sample-namespace

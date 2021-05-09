@@ -46,8 +46,8 @@ const (
 	ingressControllerPrefix = "kubesphere-router-"
 	configMapSuffix         = "-nginx"
 	serviceAccountName      = "kubesphere-router-serviceaccount"
-	roleName                = "system:kubesphere-router-role"
-	roleBindingName         = "nginx-ingress-role-nisa-binding"
+	clusterRoleName         = "system:kubesphere-router-clusterrole"
+	clusterRoleBindingName  = "system:nginx-ingress-clusterrole-binding"
 )
 
 type RouterOperator interface {
@@ -85,10 +85,10 @@ func NewRouterOperator(client kubernetes.Interface, informers informers.SharedIn
 			routerTemplates["SERVICE"] = obj
 		case *v1.Deployment:
 			routerTemplates["DEPLOYMENT"] = obj
-		case *rbacv1.Role:
-			routerTemplates["ROLE"] = obj
-		case *rbacv1.RoleBinding:
-			routerTemplates["ROLEBINDINGS"] = obj
+		case *rbacv1.ClusterRole:
+			routerTemplates["CLUSTERROLE"] = obj
+		case *rbacv1.ClusterRoleBinding:
+			routerTemplates["CLUSTERROLEBINDINGS"] = obj
 		case *corev1.ServiceAccount:
 			routerTemplates["SERVICEACCOUNT"] = obj
 		}
@@ -335,17 +335,16 @@ func (c *routerOperator) GrantPrivelges(namespace string) error {
 		}
 	}
 
-	role, err := c.client.RbacV1().Roles(namespace).Get(roleName, metav1.GetOptions{})
+	clusterRole, err := c.client.RbacV1().ClusterRoles().Get(clusterRoleName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
-			obj, ok := c.routerTemplates["ROLE"]
+			obj, ok := c.routerTemplates["CLUSTERROLE"]
 			if !ok {
-				klog.Error("role template file not loaded")
-				return fmt.Errorf("role template file not loaded")
+				klog.Error("clusterRole template file not loaded")
+				return fmt.Errorf("clusterRole template file not loaded")
 			}
-			role = obj.(*rbacv1.Role)
-			role.Namespace = namespace
-			_, err = c.client.RbacV1().Roles(namespace).Create(role)
+			clusterRole = obj.(*rbacv1.ClusterRole)
+			_, err = c.client.RbacV1().ClusterRoles().Create(clusterRole)
 			if err != nil {
 				klog.Error(err)
 				return err
@@ -353,23 +352,51 @@ func (c *routerOperator) GrantPrivelges(namespace string) error {
 		}
 	}
 
-	roleBinding, err := c.client.RbacV1().RoleBindings(namespace).Get(roleBindingName, metav1.GetOptions{})
+	rolebindingsExist := true
+
+	clusterRoleBinding, err := c.client.RbacV1().ClusterRoleBindings().Get(clusterRoleBindingName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
-			obj, ok := c.routerTemplates["ROLEBINDINGS"]
-			if !ok {
-				klog.Error("roleBinding template file not loaded")
-				return fmt.Errorf("roleBinding template file not loaded")
-			}
-			roleBinding = obj.(*rbacv1.RoleBinding)
-			roleBinding.Namespace = namespace
-			_, err = c.client.RbacV1().RoleBindings(namespace).Create(roleBinding)
-			if err != nil {
-				klog.Error(err)
-				return err
+			rolebindingsExist = false
+		}
+		klog.Warning(err)
+	}
+
+	if rolebindingsExist {
+		for _, subject := range clusterRoleBinding.Subjects {
+			// clusterrolebinding subject exist
+			if subject.Namespace == namespace {
+				return nil
 			}
 		}
 	}
+
+	obj, ok := c.routerTemplates["CLUSTERROLEBINDINGS"]
+	if !ok {
+		klog.Error("clusterRoleBinding template file not loaded")
+		return fmt.Errorf("clusterRoleBinding template file not loaded")
+	}
+	clusterRoleBindingNew := obj.(*rbacv1.ClusterRoleBinding)
+	clusterRoleBindingNew.Subjects[0].Namespace = namespace
+
+	// clusterrolebinding not exists, should create it.
+	if !rolebindingsExist {
+		_, err = c.client.RbacV1().ClusterRoleBindings().Create(clusterRoleBindingNew)
+		if err != nil {
+			klog.Error(err)
+			return err
+		}
+		return nil
+	}
+
+	// clusterrolebinding exists, but no subject. Just update it.
+	clusterRoleBinding.Subjects = append(clusterRoleBinding.Subjects, clusterRoleBindingNew.Subjects[0])
+	_, err = c.client.RbacV1().ClusterRoleBindings().Update(clusterRoleBinding)
+	if err != nil {
+		klog.Error(err)
+		return err
+	}
+
 	return nil
 }
 
@@ -462,14 +489,25 @@ func (c *routerOperator) deletePriveleges(namespace string) error {
 		klog.Error(err)
 	}
 
-	err = c.client.RbacV1().RoleBindings(namespace).Delete(roleBindingName, &deleteOptions)
+	clusterRoleBinding, err := c.client.RbacV1().ClusterRoleBindings().Get(clusterRoleBindingName, metav1.GetOptions{})
 	if err != nil {
-		klog.Error(err)
+		klog.Warning(err)
 	}
 
-	err = c.client.RbacV1().Roles(namespace).Delete(roleName, &deleteOptions)
+	// Just need remove the subject in clusterrolebindings.
+	for i, subject := range clusterRoleBinding.Subjects {
+		if subject.Namespace == namespace {
+			lenth := len(clusterRoleBinding.Subjects)
+			clusterRoleBinding.Subjects = clusterRoleBinding.Subjects[:i]
+			if i < lenth-1 {
+				clusterRoleBinding.Subjects = append(clusterRoleBinding.Subjects, clusterRoleBinding.Subjects[i+1:]...)
+			}
+		}
+	}
+
+	_, err = c.client.RbacV1().ClusterRoleBindings().Update(clusterRoleBinding)
 	if err != nil {
-		klog.Error(err)
+		klog.Warning(err)
 	}
 
 	return nil
