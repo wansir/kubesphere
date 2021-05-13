@@ -498,9 +498,10 @@ func (c *routerOperator) deletePriveleges(namespace string) error {
 	for i, subject := range clusterRoleBinding.Subjects {
 		if subject.Namespace == namespace {
 			lenth := len(clusterRoleBinding.Subjects)
-			clusterRoleBinding.Subjects = clusterRoleBinding.Subjects[:i]
 			if i < lenth-1 {
-				clusterRoleBinding.Subjects = append(clusterRoleBinding.Subjects, clusterRoleBinding.Subjects[i+1:]...)
+				clusterRoleBinding.Subjects = append(clusterRoleBinding.Subjects[:i], clusterRoleBinding.Subjects[i+1:]...)
+			}else {
+				clusterRoleBinding.Subjects = clusterRoleBinding.Subjects[:i]
 			}
 		}
 	}
