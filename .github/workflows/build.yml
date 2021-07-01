@@ -57,10 +57,10 @@ jobs:
           name: codecov-umbrella
           fail_ci_if_error: false
 
-      - name: Get branch name
-        id: extract_branch
+      - name: Get image tag
+        id: extract_imate_tag
         shell: bash
-        run: echo "##[set-output name=branch;]$(echo ${GITHUB_REF#refs/heads/})"
+        run: echo ::set-output name=tag::${GITHUB_REF#refs/*/}
 
       - name: Build and push docker images
         env:
@@ -69,4 +69,4 @@ jobs:
         if: github.event_name == 'push'
         run: |
           echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
-          bash hack/docker_build.sh ${{ steps.extract_branch.outputs.branch }}
+          bash hack/docker_build.sh ${{ steps.extract_imate_tag.outputs.tag }}
