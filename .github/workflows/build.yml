@@ -60,7 +60,9 @@ jobs:
       - name: Get image tag
         id: extract_imate_tag
         shell: bash
-        run: echo ::set-output name=tag::${GITHUB_REF#refs/*/}
+        run: |
+          echo ${GITHUB_REF#refs/*/}
+          echo ::set-output name=tag::${GITHUB_REF#refs/*/}
 
       - name: Build and push docker images
         env:
