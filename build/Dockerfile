@@ -23,7 +23,6 @@ COPY --from=binarydownloader /usr/local/bin/etcd /usr/local/kubebuilder/bin/etcd
 RUN bash -c "source /opt/kubesphere/hack/init_env.sh && make ks-apiserver"
 RUN bash -c "source /opt/kubesphere/hack/init_env.sh && make ks-controller-manager"
 
-
 FROM alpine:3.11 as ks-apiserver
 RUN apk add --no-cache ca-certificates
 COPY --from=binarydownloader /usr/bin/helm /usr/bin/helm
