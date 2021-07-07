@@ -27,6 +27,7 @@ import (
 	applicationv1alpha1 "kubesphere.io/kubesphere/pkg/client/clientset/versioned/typed/application/v1alpha1"
 	auditingv1alpha1 "kubesphere.io/kubesphere/pkg/client/clientset/versioned/typed/auditing/v1alpha1"
 	clusterv1alpha1 "kubesphere.io/kubesphere/pkg/client/clientset/versioned/typed/cluster/v1alpha1"
+	componentv1alpha1 "kubesphere.io/kubesphere/pkg/client/clientset/versioned/typed/component/v1alpha1"
 	devopsv1alpha1 "kubesphere.io/kubesphere/pkg/client/clientset/versioned/typed/devops/v1alpha1"
 	devopsv1alpha3 "kubesphere.io/kubesphere/pkg/client/clientset/versioned/typed/devops/v1alpha3"
 	iamv1alpha2 "kubesphere.io/kubesphere/pkg/client/clientset/versioned/typed/iam/v1alpha2"
@@ -45,6 +46,7 @@ type Interface interface {
 	ApplicationV1alpha1() applicationv1alpha1.ApplicationV1alpha1Interface
 	AuditingV1alpha1() auditingv1alpha1.AuditingV1alpha1Interface
 	ClusterV1alpha1() clusterv1alpha1.ClusterV1alpha1Interface
+	ComponentV1alpha1() componentv1alpha1.ComponentV1alpha1Interface
 	DevopsV1alpha1() devopsv1alpha1.DevopsV1alpha1Interface
 	DevopsV1alpha3() devopsv1alpha3.DevopsV1alpha3Interface
 	IamV1alpha2() iamv1alpha2.IamV1alpha2Interface
@@ -65,6 +67,7 @@ type Clientset struct {
 	applicationV1alpha1 *applicationv1alpha1.ApplicationV1alpha1Client
 	auditingV1alpha1    *auditingv1alpha1.AuditingV1alpha1Client
 	clusterV1alpha1     *clusterv1alpha1.ClusterV1alpha1Client
+	componentV1alpha1   *componentv1alpha1.ComponentV1alpha1Client
 	devopsV1alpha1      *devopsv1alpha1.DevopsV1alpha1Client
 	devopsV1alpha3      *devopsv1alpha3.DevopsV1alpha3Client
 	iamV1alpha2         *iamv1alpha2.IamV1alpha2Client
@@ -91,6 +94,11 @@ func (c *Clientset) AuditingV1alpha1() auditingv1alpha1.AuditingV1alpha1Interfac
 // ClusterV1alpha1 retrieves the ClusterV1alpha1Client
 func (c *Clientset) ClusterV1alpha1() clusterv1alpha1.ClusterV1alpha1Interface {
 	return c.clusterV1alpha1
+}
+
+// ComponentV1alpha1 retrieves the ComponentV1alpha1Client
+func (c *Clientset) ComponentV1alpha1() componentv1alpha1.ComponentV1alpha1Interface {
+	return c.componentV1alpha1
 }
 
 // DevopsV1alpha1 retrieves the DevopsV1alpha1Client
@@ -181,6 +189,10 @@ func NewForConfig(c *rest.Config) (*Clientset, error) {
 	if err != nil {
 		return nil, err
 	}
+	cs.componentV1alpha1, err = componentv1alpha1.NewForConfig(&configShallowCopy)
+	if err != nil {
+		return nil, err
+	}
 	cs.devopsV1alpha1, err = devopsv1alpha1.NewForConfig(&configShallowCopy)
 	if err != nil {
 		return nil, err
@@ -240,6 +252,7 @@ func NewForConfigOrDie(c *rest.Config) *Clientset {
 	cs.applicationV1alpha1 = applicationv1alpha1.NewForConfigOrDie(c)
 	cs.auditingV1alpha1 = auditingv1alpha1.NewForConfigOrDie(c)
 	cs.clusterV1alpha1 = clusterv1alpha1.NewForConfigOrDie(c)
+	cs.componentV1alpha1 = componentv1alpha1.NewForConfigOrDie(c)
 	cs.devopsV1alpha1 = devopsv1alpha1.NewForConfigOrDie(c)
 	cs.devopsV1alpha3 = devopsv1alpha3.NewForConfigOrDie(c)
 	cs.iamV1alpha2 = iamv1alpha2.NewForConfigOrDie(c)
@@ -262,6 +275,7 @@ func New(c rest.Interface) *Clientset {
 	cs.applicationV1alpha1 = applicationv1alpha1.New(c)
 	cs.auditingV1alpha1 = auditingv1alpha1.New(c)
 	cs.clusterV1alpha1 = clusterv1alpha1.New(c)
+	cs.componentV1alpha1 = componentv1alpha1.New(c)
 	cs.devopsV1alpha1 = devopsv1alpha1.New(c)
 	cs.devopsV1alpha3 = devopsv1alpha3.New(c)
 	cs.iamV1alpha2 = iamv1alpha2.New(c)

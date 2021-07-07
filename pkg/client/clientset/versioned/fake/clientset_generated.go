@@ -31,6 +31,8 @@ import (
 	fakeauditingv1alpha1 "kubesphere.io/kubesphere/pkg/client/clientset/versioned/typed/auditing/v1alpha1/fake"
 	clusterv1alpha1 "kubesphere.io/kubesphere/pkg/client/clientset/versioned/typed/cluster/v1alpha1"
 	fakeclusterv1alpha1 "kubesphere.io/kubesphere/pkg/client/clientset/versioned/typed/cluster/v1alpha1/fake"
+	componentv1alpha1 "kubesphere.io/kubesphere/pkg/client/clientset/versioned/typed/component/v1alpha1"
+	fakecomponentv1alpha1 "kubesphere.io/kubesphere/pkg/client/clientset/versioned/typed/component/v1alpha1/fake"
 	devopsv1alpha1 "kubesphere.io/kubesphere/pkg/client/clientset/versioned/typed/devops/v1alpha1"
 	fakedevopsv1alpha1 "kubesphere.io/kubesphere/pkg/client/clientset/versioned/typed/devops/v1alpha1/fake"
 	devopsv1alpha3 "kubesphere.io/kubesphere/pkg/client/clientset/versioned/typed/devops/v1alpha3"
@@ -115,6 +117,11 @@ func (c *Clientset) AuditingV1alpha1() auditingv1alpha1.AuditingV1alpha1Interfac
 // ClusterV1alpha1 retrieves the ClusterV1alpha1Client
 func (c *Clientset) ClusterV1alpha1() clusterv1alpha1.ClusterV1alpha1Interface {
 	return &fakeclusterv1alpha1.FakeClusterV1alpha1{Fake: &c.Fake}
+}
+
+// ComponentV1alpha1 retrieves the ComponentV1alpha1Client
+func (c *Clientset) ComponentV1alpha1() componentv1alpha1.ComponentV1alpha1Interface {
+	return &fakecomponentv1alpha1.FakeComponentV1alpha1{Fake: &c.Fake}
 }
 
 // DevopsV1alpha1 retrieves the DevopsV1alpha1Client

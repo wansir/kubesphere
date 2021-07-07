@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The KubeSphere Authors.
+Copyright 2020 The KubeSphere Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,11 +16,13 @@ limitations under the License.
 
 // NOTE: Boilerplate only. Ignore this file.
 
-// Package v1alpha2 contains API Schema definitions for the iam v1alpha2 API group
+// Package v1alpha1 contains API Schema definitions for the component v1alpha1 API group
 // +k8s:openapi-gen=true
-// +kubebuilder:object:generate=true
-// +groupName=iam.kubesphere.io
-package v1alpha2
+// +k8s:deepcopy-gen=package,register
+// +k8s:conversion-gen=kubesphere.io/kubesphere/pkg/apis/component
+// +k8s:defaulter-gen=TypeMeta
+// +groupName=component.kubesphere.io
+package v1alpha1
 
 import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -29,7 +31,7 @@ import (
 
 var (
 	// SchemeGroupVersion is group version used to register these objects
-	SchemeGroupVersion = schema.GroupVersion{Group: "iam.kubesphere.io", Version: "v1alpha2"}
+	SchemeGroupVersion = schema.GroupVersion{Group: "component.kubesphere.io", Version: "v1alpha1"}
 
 	// SchemeBuilder is used to add go types to the GroupVersionKind scheme
 	SchemeBuilder = &scheme.Builder{GroupVersion: SchemeGroupVersion}
@@ -37,29 +39,6 @@ var (
 	// AddToScheme is required by pkg/client/...
 	AddToScheme = SchemeBuilder.AddToScheme
 )
-
-func init() {
-	SchemeBuilder.Register(&User{},
-		&UserList{},
-		&LoginRecord{},
-		&LoginRecordList{},
-		&GlobalRole{},
-		&GlobalRoleList{},
-		&GlobalRoleBinding{},
-		&GlobalRoleBindingList{},
-		&WorkspaceRole{},
-		&WorkspaceRoleList{},
-		&WorkspaceRoleBinding{},
-		&WorkspaceRoleBindingList{},
-		&RoleBase{},
-		&RoleBaseList{},
-		&Group{},
-		&GroupList{},
-		&GroupBinding{},
-		&GroupBindingList{})
-
-}
-
 
 // Resource is required by pkg/client/listers/...
 func Resource(resource string) schema.GroupResource {

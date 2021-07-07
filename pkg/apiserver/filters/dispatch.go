@@ -48,3 +48,17 @@ func WithMultipleClusterDispatcher(handler http.Handler, dispatch dispatch.Dispa
 		}
 	})
 }
+
+func WithAPIServiceDispatcher(handler http.Handler, dispatch dispatch.Dispatcher) http.Handler {
+	if dispatch == nil {
+		klog.V(4).Infof("APIService dispatcher is disabled")
+		return handler
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		info, _ := request.RequestInfoFrom(req.Context())
+
+		if info.IsKubernetesRequest || !dispatch.Dispatch(w, req, handler) {
+			handler.ServeHTTP(w, req)
+		}
+	})
+}

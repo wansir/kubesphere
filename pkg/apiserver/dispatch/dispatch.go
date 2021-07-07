@@ -40,7 +40,7 @@ const proxyURLFormat = "/api/v1/namespaces/kubesphere-system/services/:ks-apiser
 // This should only be used in host cluster when multicluster mode enabled, use in any other cases may cause
 // unexpected behavior
 type Dispatcher interface {
-	Dispatch(w http.ResponseWriter, req *http.Request, handler http.Handler)
+	Dispatch(w http.ResponseWriter, req *http.Request, handler http.Handler) bool
 }
 
 type clusterDispatch struct {
@@ -52,13 +52,13 @@ func NewClusterDispatch(clusterInformer clusterinformer.ClusterInformer) Dispatc
 }
 
 // Dispatch dispatch requests to designated cluster
-func (c *clusterDispatch) Dispatch(w http.ResponseWriter, req *http.Request, handler http.Handler) {
+func (c *clusterDispatch) Dispatch(w http.ResponseWriter, req *http.Request, handler http.Handler) bool {
 	info, _ := request.RequestInfoFrom(req.Context())
 
 	if len(info.Cluster) == 0 {
 		klog.Warningf("Request with empty cluster, %v", req.URL)
 		http.Error(w, fmt.Sprintf("Bad request, empty cluster"), http.StatusBadRequest)
-		return
+		return false
 	}
 
 	cluster, err := c.Get(info.Cluster)
@@ -68,25 +68,25 @@ func (c *clusterDispatch) Dispatch(w http.ResponseWriter, req *http.Request, han
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		return
+		return false
 	}
 
 	// request cluster is host cluster, no need go through agent
 	if c.IsHostCluster(cluster) {
 		req.URL.Path = strings.Replace(req.URL.Path, fmt.Sprintf("/clusters/%s", info.Cluster), "", 1)
 		handler.ServeHTTP(w, req)
-		return
+		return false
 	}
 
 	if !c.IsClusterReady(cluster) {
 		http.Error(w, fmt.Sprintf("cluster %s is not ready", cluster.Name), http.StatusBadRequest)
-		return
+		return false
 	}
 
 	innCluster := c.GetInnerCluster(cluster.Name)
 	if innCluster == nil {
 		http.Error(w, fmt.Sprintf("cluster %s is not ready", cluster.Name), http.StatusBadRequest)
-		return
+		return false
 	}
 
 	transport := http.DefaultTransport
@@ -144,6 +144,8 @@ func (c *clusterDispatch) Dispatch(w http.ResponseWriter, req *http.Request, han
 	httpProxy := proxy.NewUpgradeAwareHandler(&u, transport, false, false, c)
 	httpProxy.UpgradeTransport = proxy.NewUpgradeRequestRoundTripper(transport, transport)
 	httpProxy.ServeHTTP(w, req)
+
+	return true
 }
 
 func (c *clusterDispatch) Error(w http.ResponseWriter, req *http.Request, err error) {

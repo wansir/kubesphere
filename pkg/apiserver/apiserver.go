@@ -173,7 +173,6 @@ func (s *APIServer) PrepareRun(stopCh <-chan struct{}) error {
 	})
 
 	s.installKubeSphereAPIs()
-
 	s.installMetricsAPI()
 	s.container.Filter(monitorRequest)
 
@@ -331,6 +330,9 @@ func (s *APIServer) buildHandlerChain(stopCh <-chan struct{}) {
 			audit.NewAuditing(s.InformerFactory, s.Config.AuditingOptions, stopCh))
 	}
 
+	apiServiceDispatcher := dispatch.NewAPIServiceDispatch(s.InformerFactory.KubeSphereSharedInformerFactory().Component().V1alpha1().APIServices())
+	handler = filters.WithAPIServiceDispatcher(handler, apiServiceDispatcher)
+
 	var authorizers authorizer.Authorizer
 
 	switch s.Config.AuthorizationOptions.Mode {
@@ -453,6 +455,8 @@ func (s *APIServer) waitForResourceSync(stopCh <-chan struct{}) error {
 		{Group: "network.kubesphere.io", Version: "v1alpha1", Resource: "ippools"},
 		{Group: "notification.kubesphere.io", Version: "v2beta1", Resource: v2beta1.ResourcesPluralConfig},
 		{Group: "notification.kubesphere.io", Version: "v2beta1", Resource: v2beta1.ResourcesPluralReceiver},
+		{Group: "component.kubesphere.io", Version: "v1alpha1", Resource: "apiservices"},
+		{Group: "component.kubesphere.io", Version: "v1alpha1", Resource: "components"},
 	}
 
 	devopsGVRs := []schema.GroupVersionResource{
@@ -577,6 +581,10 @@ func (s *APIServer) waitForResourceSync(stopCh <-chan struct{}) error {
 	klog.V(0).Info("Finished caching objects")
 
 	return nil
+
+}
+
+func (s *APIServer) watchAPIService() {
 
 }
 
