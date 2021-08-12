@@ -17,6 +17,7 @@ limitations under the License.
 package routers
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	v1 "k8s.io/api/apps/v1"
@@ -272,7 +273,7 @@ func (c *routerOperator) createRouterService(namespace string, routerType corev1
 	// Add project selector
 	service.Labels["project"] = namespace
 	service.Spec.Selector["project"] = namespace
-	service, err := c.client.CoreV1().Services(namespace).Create(service)
+	service, err := c.client.CoreV1().Services(namespace).Create(context.Background(),service,metav1.CreateOptions{})
 	if err != nil {
 		klog.Error(err)
 		return nil, err
@@ -290,7 +291,7 @@ func (c *routerOperator) updateRouterService(namespace string, routerType corev1
 
 	service.Spec.Type = routerType
 	service.SetAnnotations(annotations)
-	service, err = c.client.CoreV1().Services(namespace).Update(service)
+	service, err = c.client.CoreV1().Services(namespace).Update(context.Background(),service,metav1.UpdateOptions{})
 	return service, err
 }
 
@@ -306,7 +307,7 @@ func (c *routerOperator) deleteRouterService(namespace string) (*corev1.Service,
 	serviceName := ingressControllerPrefix + namespace
 	deleteOptions := metav1.DeleteOptions{}
 
-	err = c.client.CoreV1().Services(namespace).Delete(serviceName, &deleteOptions)
+	err = c.client.CoreV1().Services(namespace).Delete(context.Background(),serviceName, deleteOptions)
 	if err != nil {
 		klog.Error(err)
 		return service, err
@@ -317,7 +318,7 @@ func (c *routerOperator) deleteRouterService(namespace string) (*corev1.Service,
 
 func (c *routerOperator) GrantPrivelges(namespace string) error {
 
-	sa, err := c.client.CoreV1().ServiceAccounts(namespace).Get(serviceAccountName, metav1.GetOptions{})
+	sa, err := c.client.CoreV1().ServiceAccounts(namespace).Get(context.Background(),serviceAccountName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			obj, ok := c.routerTemplates["SERVICEACCOUNT"]
@@ -327,7 +328,7 @@ func (c *routerOperator) GrantPrivelges(namespace string) error {
 			}
 			sa = obj.(*corev1.ServiceAccount)
 			sa.Namespace = namespace
-			_, err = c.client.CoreV1().ServiceAccounts(namespace).Create(sa)
+			_, err = c.client.CoreV1().ServiceAccounts(namespace).Create(context.Background(),sa,metav1.CreateOptions{})
 			if err != nil {
 				klog.Error(err)
 				return err
@@ -335,7 +336,7 @@ func (c *routerOperator) GrantPrivelges(namespace string) error {
 		}
 	}
 
-	clusterRole, err := c.client.RbacV1().ClusterRoles().Get(clusterRoleName, metav1.GetOptions{})
+	clusterRole, err := c.client.RbacV1().ClusterRoles().Get(context.Background(),clusterRoleName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			obj, ok := c.routerTemplates["CLUSTERROLE"]
@@ -344,7 +345,7 @@ func (c *routerOperator) GrantPrivelges(namespace string) error {
 				return fmt.Errorf("clusterRole template file not loaded")
 			}
 			clusterRole = obj.(*rbacv1.ClusterRole)
-			_, err = c.client.RbacV1().ClusterRoles().Create(clusterRole)
+			_, err = c.client.RbacV1().ClusterRoles().Create(context.Background(),clusterRole,metav1.CreateOptions{})
 			if err != nil {
 				klog.Error(err)
 				return err
@@ -354,7 +355,7 @@ func (c *routerOperator) GrantPrivelges(namespace string) error {
 
 	rolebindingsExist := true
 
-	clusterRoleBinding, err := c.client.RbacV1().ClusterRoleBindings().Get(clusterRoleBindingName, metav1.GetOptions{})
+	clusterRoleBinding, err := c.client.RbacV1().ClusterRoleBindings().Get(context.Background(),clusterRoleBindingName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			rolebindingsExist = false
@@ -381,7 +382,7 @@ func (c *routerOperator) GrantPrivelges(namespace string) error {
 
 	// clusterrolebinding not exists, should create it.
 	if !rolebindingsExist {
-		_, err = c.client.RbacV1().ClusterRoleBindings().Create(clusterRoleBindingNew)
+		_, err = c.client.RbacV1().ClusterRoleBindings().Create(context.Background(),clusterRoleBindingNew,metav1.CreateOptions{})
 		if err != nil {
 			klog.Error(err)
 			return err
@@ -391,7 +392,7 @@ func (c *routerOperator) GrantPrivelges(namespace string) error {
 
 	// clusterrolebinding exists, but no subject. Just update it.
 	clusterRoleBinding.Subjects = append(clusterRoleBinding.Subjects, clusterRoleBindingNew.Subjects[0])
-	_, err = c.client.RbacV1().ClusterRoleBindings().Update(clusterRoleBinding)
+	_, err = c.client.RbacV1().ClusterRoleBindings().Update(context.Background(),clusterRoleBinding,metav1.UpdateOptions{})
 	if err != nil {
 		klog.Error(err)
 		return err
@@ -409,7 +410,7 @@ func (c *routerOperator) createOrUpdateRouterWorkload(namespace string, publishS
 
 	deployName := ingressControllerPrefix + namespace
 
-	deployment, err := c.client.AppsV1().Deployments(namespace).Get(deployName, metav1.GetOptions{})
+	deployment, err := c.client.AppsV1().Deployments(namespace).Get(context.Background(),deployName, metav1.GetOptions{})
 
 	createDeployment := true
 
@@ -469,9 +470,9 @@ func (c *routerOperator) createOrUpdateRouterWorkload(namespace string, publishS
 	}
 
 	if createDeployment {
-		deployment, err = c.client.AppsV1().Deployments(namespace).Create(deployment)
+		deployment, err = c.client.AppsV1().Deployments(namespace).Create(context.Background(),deployment,metav1.CreateOptions{})
 	} else {
-		deployment, err = c.client.AppsV1().Deployments(namespace).Update(deployment)
+		deployment, err = c.client.AppsV1().Deployments(namespace).Update(context.Background(),deployment,metav1.UpdateOptions{})
 	}
 
 	if err != nil {
@@ -484,12 +485,12 @@ func (c *routerOperator) createOrUpdateRouterWorkload(namespace string, publishS
 
 func (c *routerOperator) deletePriveleges(namespace string) error {
 	deleteOptions := metav1.DeleteOptions{}
-	err := c.client.CoreV1().ServiceAccounts(namespace).Delete(serviceAccountName, &deleteOptions)
+	err := c.client.CoreV1().ServiceAccounts(namespace).Delete(context.Background(),serviceAccountName, deleteOptions)
 	if err != nil {
 		klog.Error(err)
 	}
 
-	clusterRoleBinding, err := c.client.RbacV1().ClusterRoleBindings().Get(clusterRoleBindingName, metav1.GetOptions{})
+	clusterRoleBinding, err := c.client.RbacV1().ClusterRoleBindings().Get(context.Background(),clusterRoleBindingName, metav1.GetOptions{})
 	if err != nil {
 		klog.Warning(err)
 	}
@@ -506,7 +507,7 @@ func (c *routerOperator) deletePriveleges(namespace string) error {
 		}
 	}
 
-	_, err = c.client.RbacV1().ClusterRoleBindings().Update(clusterRoleBinding)
+	_, err = c.client.RbacV1().ClusterRoleBindings().Update(context.Background(),clusterRoleBinding,metav1.UpdateOptions{})
 	if err != nil {
 		klog.Warning(err)
 	}
@@ -518,7 +519,7 @@ func (c *routerOperator) deleteRouterWorkload(namespace string) error {
 	deleteOptions := metav1.DeleteOptions{}
 	// delete controller deployment
 	deploymentName := ingressControllerPrefix + namespace
-	err := c.client.AppsV1().Deployments(namespace).Delete(deploymentName, &deleteOptions)
+	err := c.client.AppsV1().Deployments(namespace).Delete(context.Background(),deploymentName, deleteOptions)
 	if err != nil {
 		klog.Error(err)
 	}
@@ -538,7 +539,7 @@ func (c *routerOperator) deleteRouterWorkload(namespace string) error {
 	}
 
 	for i := range replicaSets {
-		err = c.client.AppsV1().ReplicaSets(namespace).Delete(replicaSets[i].Name, &deleteOptions)
+		err = c.client.AppsV1().ReplicaSets(namespace).Delete(context.Background(),replicaSets[i].Name, deleteOptions)
 		if err != nil {
 			klog.Error(err)
 		}
