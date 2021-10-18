@@ -18,7 +18,9 @@ package cas
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 
@@ -45,6 +47,7 @@ type casProviderFactory struct {
 
 type casIdentity struct {
 	User string `json:"user"`
+	ID   string `json:"id"`
 }
 
 func (c casIdentity) GetUserID() string {
@@ -90,9 +93,38 @@ func (f casProviderFactory) Create(options oauth.DynamicOptions) (identityprovid
 }
 
 func (c cas) IdentityExchange(ticket string) (identityprovider.Identity, error) {
-	resp, err := c.client.ValidateServiceTicket(gocas.ServiceTicket(ticket))
-	if err != nil {
-		return nil, fmt.Errorf("cas validate service ticket failed: %v", err)
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: c.InsecureSkipVerify},
 	}
-	return &casIdentity{User: resp.User}, nil
+	client := &http.Client{Transport: tr}
+	serviceValidateURL := fmt.Sprintf("%s/serviceValidate?&service=%s&ticket=%s", c.CASServerURL, c.RedirectURL, ticket)
+	resp, err := client.Get(serviceValidateURL)
+	if err != nil {
+		return nil, fmt.Errorf("cas validate service failed: %v", err)
+	}
+	defer resp.Body.Close()
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("cas read data failed: %v", err)
+	}
+
+	casResponse, err := gocas.ParseServiceResponse(data)
+	if err != nil {
+		return nil, fmt.Errorf("cas authentication failed: %v", err)
+	}
+
+	if len(casResponse.Attributes["userDetail"]) == 0 {
+		return nil, fmt.Errorf("cas authentication failed: %v", "missing required field \"userDetail\"")
+	}
+
+	var userDetail userDetail
+	if err = json.Unmarshal([]byte(casResponse.Attributes["userDetail"][0]), &userDetail); err != nil {
+		return nil, fmt.Errorf("cas authentication failed: %v", err)
+	}
+
+	return &casIdentity{ID: userDetail.Mobile, User: casResponse.User}, nil
+}
+
+type userDetail struct {
+	Mobile string `json:"mobile"`
 }
