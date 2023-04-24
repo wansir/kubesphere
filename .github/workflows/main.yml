@@ -9,6 +9,12 @@ jobs:
   sbom:
     runs-on: ubuntu-latest
     steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+    - run: pwd
+    - run: ls
     - name: Generate SBOM artifact
       uses: anchore/sbom-action@v0
       with:
