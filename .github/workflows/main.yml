@@ -12,5 +12,5 @@ jobs:
     - name: Generate SBOM artifact
       uses: anchore/sbom-action@v0
       with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
+        github-token: ${{ secrets.GH_TOKEN }}
         artifact-name: sbom.spdx.json
