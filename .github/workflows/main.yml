@@ -1,0 +1,15 @@
+name: GenerateSBOM
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Generate SBOM artifact
+      uses: anchore/sbom-action@v0
+      with:
+        artifact-name: sbom.spdx.json
