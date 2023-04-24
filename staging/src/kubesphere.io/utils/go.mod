@@ -35,7 +35,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/cli v20.10.22+incompatible // indirect
 	github.com/docker/distribution v2.8.1+incompatible // indirect
-	github.com/docker/docker v20.10.23+incompatible // indirect
+	github.com/docker/docker v20.10.24+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.7.0 // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-metrics v0.0.1 // indirect
@@ -146,4 +146,7 @@ require (
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
 
-replace kubesphere.io/utils => ../utils
+replace (
+	github.com/spf13/viper => github.com/spf13/viper v1.4.0
+	kubesphere.io/utils => ../utils
+)

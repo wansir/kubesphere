@@ -17,7 +17,6 @@ limitations under the License.
 package cache
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -48,16 +47,6 @@ type Interface interface {
 
 	// Expires updates object's expiration time, return err if key doesn't exist
 	Expire(key string, duration time.Duration) error
-}
-
-// DynamicOptions the options of the cache. For redis, options key can be  "host", "port", "db", "password".
-// For InMemoryCache, options key can be "cleanupperiod"
-type DynamicOptions map[string]interface{}
-
-func (o DynamicOptions) MarshalJSON() ([]byte, error) {
-
-	data, err := json.Marshal(o)
-	return data, err
 }
 
 func RegisterCacheFactory(factory CacheFactory) {
