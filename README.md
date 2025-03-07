@@ -122,7 +122,7 @@ KubeSphere uses a loosely-coupled architecture that separates the [frontend](htt
 the [backend](https://github.com/kubesphere/kubesphere). External systems can access the components of the backend
 through the REST APIs.
 
-![Architecture](docs/images/architecture.png)
+![Architecture](docs/images/architecture.png#gh-light-mode-only)
 
 ----
 
@@ -222,7 +222,7 @@ set up development environment.
 
 - [Slack Channel](https://join.slack.com/t/kubesphere/shared_invite/zt-219hq0b5y-el~FMRrJxGM1Egf5vX6QiA)
 - [Youtube](https://www.youtube.com/channel/UCyTdUQUYjf7XLjxECx63Hpw)
-- [Twitter](https://twitter.com/KubeSphere)
+- [X/Twitter](https://x.com/KubeSphere)
 
 :hugs: Please submit any KubeSphere bugs, issues, and feature requests
 to [KubeSphere GitHub Issue](https://github.com/kubesphere/kubesphere/issues).
@@ -239,9 +239,9 @@ can [leave a comment](https://github.com/kubesphere/kubesphere/issues/4123) to l
 
 <p align="center">
 <br/><br/>
-<img src="https://landscape.cncf.io/images/left-logo.svg" width="150"/>&nbsp;&nbsp;<img src="https://landscape.cncf.io/images/right-logo.svg" width="200"/>&nbsp;&nbsp;
+<img src="https://raw.githubusercontent.com/cncf/artwork/refs/heads/main/other/cncf-landscape/horizontal/color/cncf-landscape-horizontal-color.svg#gh-light-mode-only" width="150"/>&nbsp;&nbsp;<img src="https://raw.githubusercontent.com/cncf/artwork/refs/heads/main/other/cncf/horizontal/color/cncf-color.svg#gh-light-mode-only" width="200"/>&nbsp;&nbsp;
 <br/><br/>
 KubeSphere is a member of CNCF and a <a href="https://www.cncf.io/certification/software-conformance/#logos">Kubernetes Conformance Certified platform
-</a>, which enriches the <a href="https://landscape.cncf.io/?landscape=observability-and-analysis&license=apache-license-2-0">CNCF CLOUD NATIVE Landscape.
+</a>, which enriches the <a href="https://landscape.cncf.io/?landscape=observability-and-analysis&group=certified-partners-and-providers&item=platform--certified-kubernetes-distribution--kubesphere">CNCF CLOUD NATIVE Landscape.
 </a>
 </p>
